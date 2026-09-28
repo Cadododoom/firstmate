@@ -2,8 +2,8 @@
 
 Audience: maintainer verification.
 
-This record supports the opt-in `bin/fm-dispatch-resolve.sh` contract owned by [`../configuration.md`](../configuration.md) ("Typed dispatch resolution") and the declared rule and profile fields owned there under "Crew dispatch profiles".
-It records only facts that must be re-established when the typesafe.ai model, its API, or firstmate's dispatch rules change.
+This record supports the optional `bin/fm-dispatch-resolve.sh` providers owned by [`../configuration.md`](../configuration.md) ("Typed dispatch resolution") and the declared rule and profile fields owned there under "Crew dispatch profiles".
+It records only facts that must be re-established when the selected System One API or firstmate's dispatch rules change.
 Task chronology, the captain's rules, and the briefs themselves stay in the private scout report.
 
 ## The API the tool depends on
@@ -14,6 +14,17 @@ Verified 2026-09-16 against `https://api.typesafe.ai`.
 Observed error shapes: 401 `authentication_error` for a bad key, 403 when the header is missing, 422 with a `detail[].loc` naming the offending field, 400 `api_usage_error` for an unknown model, 405 on GET.
 No rate-limit headers were present on any response; every response carried `x-typesafe-request-id`.
 Observed end-to-end latency from a Mac was 123 to 348 ms per request, with the server's own upstream time at 4 to 60 ms.
+
+## Canonical Laya compatibility surface
+
+Audited 2026-09-28 against the canonical `NandhaKishorM/laya` repository and release tag `v0.3.21`.
+`gh-axi api /repos/NandhaKishorM/laya/releases/latest --jq '{tag_name, published_at, html_url}'` returned `v0.3.21`, published `2026-09-27T19:41:23Z`, at `https://github.com/NandhaKishorM/laya/releases/tag/v0.3.21`.
+`gh-axi api /repos/NandhaKishorM/laya/git/ref/tags/v0.3.21 --jq '.object.sha, .object.type'` returned tag object `6ab71fb4ce6bfd6f189e9b689eaadd67103ed9b6` of type `tag`.
+`gh-axi api /repos/NandhaKishorM/laya/git/tags/6ab71fb4ce6bfd6f189e9b689eaadd67103ed9b6 --jq '.object.sha, .object.type'` returned release commit `9d955671415fc19f069b9cc998928075c1f255ec` of type `commit`.
+`gh-axi api /repos/NandhaKishorM/laya/contents/pyproject.toml?ref=v0.3.21 --header 'Accept: application/vnd.github.raw+json' --full` confirmed package version `0.3.21`, the optional `serve` extra with FastAPI and Uvicorn, and the `laya-serve` entry point.
+`gh-axi api /repos/NandhaKishorM/laya/contents/laya/serve.py?ref=v0.3.21 --header 'Accept: application/vnd.github.raw+json' --full` confirmed that the canonical HTTP server exposes `POST /v1/systemone` using Jev-compatible answer and usage shapes, with optional `LAYA_API_KEY` bearer authentication.
+The same source ignores unknown Jev model IDs and lets the Router select a checkpoint, and documents a default bind of `0.0.0.0:8000`.
+This source audit supports the direct protocol integration only; no live Laya endpoint, Firstmate dispatch-quality run, or Firstmate latency benchmark has been measured.
 
 ## Live rule match against real briefs
 
