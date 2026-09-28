@@ -1238,8 +1238,6 @@ Firstmate passes its profile line unless it states a reason to override, such as
 - The resolver and bootstrap keep TypeSafe and Laya keys in non-exported private variables and unset their source environment names before launching child processes.
 - The resolver sends a provider key to `curl` only as an Authorization header read from a file descriptor, never on argv or in the JSON state.
 - TypeSafe uses `https://api.typesafe.ai/v1/systemone`, model `jev-latest`, the 0.6 default confidence floor, and a 5-second request timeout.
-- Laya uses the explicitly configured `LAYA_SYSTEMONE_BASE_URL` origin plus `/v1/systemone`, the 0.6 default confidence floor, and a 30-second request timeout.
-- `DISPATCH_SYSTEMONE_PROVIDER`, `TYPESAFE_API_KEY`, `LAYA_SYSTEMONE_BASE_URL`, and `LAYA_API_KEY` are the resolver's provider settings.
 
 The live rule-match evidence is recorded in [`verification/dispatch-resolve.md`](verification/dispatch-resolve.md).
 
