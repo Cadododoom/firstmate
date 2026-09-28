@@ -23,6 +23,10 @@
 # twice.
 set -u
 
+unset TYPESAFE_API_KEY LAYA_API_KEY LAYA_SYSTEMONE_BASE_URL 2>/dev/null || true
+DISPATCH_SYSTEMONE_PROVIDER=typesafe
+export DISPATCH_SYSTEMONE_PROVIDER
+
 # shellcheck source=tests/lib.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -1210,7 +1214,7 @@ ROWS
   printf '%s\n' '{"rules":[{"when":"legacy metadata","approval":"firstmate","floor":{"scope":"all_models","min_percent":200,"provider":"CLAUDE"},"use":{"harness":"claude","provider":"Anthropic","floor":{"scope":"all_models"}}}]}' > "$case_dir/home/config/crew-dispatch.json"
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
     FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
-  [ -z "$out" ] || fail "resolver-only fields must be ignored without the typed key, got: $out"
+  [ -z "$out" ] || fail "resolver-only fields must be ignored with TypeSafe selected and no key, got: $out"
   printf '%s\n' 'TYPESAFE_API_KEY=test-key' > "$case_dir/home/.env"
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
     FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
@@ -1241,7 +1245,7 @@ ROWS
   child_env=$(cat "$case_dir/child-env.log")
   [ -n "$child_env" ] || fail "bootstrap child environment probe did not run"
   assert_not_contains "$child_env" 'secret-present' "bootstrap children never inherit the typesafe key"
-  pass "bootstrap gates resolver fields and additive harnesses on the typed key"
+  pass "bootstrap gates resolver fields and additive harnesses on typed-provider activation"
 }
 
 test_bootstrap_reporting
