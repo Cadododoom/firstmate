@@ -166,7 +166,7 @@ run() {
   local __exit=$1 __out=$2 __err=$3 _out _code
   shift 3
   _out=$(PATH="$FAKEBIN:$BASE_PATH" FM_HOME="$HOME_DIR" DISPATCH_SYSTEMONE_PROVIDER=typesafe \
-    LAYA_API_KEY= LAYA_SYSTEMONE_BASE_URL= "$TOOL" "$@" 2> "$TMP_ROOT/stderr")
+    LAYA_API_KEY='' LAYA_SYSTEMONE_BASE_URL='' "$TOOL" "$@" 2> "$TMP_ROOT/stderr")
   _code=$?
   printf -v "$__exit" '%s' "$_code"
   printf -v "$__out" '%s' "$_out"
@@ -177,7 +177,7 @@ run_without_curl() {
   local __exit=$1 __out=$2 __err=$3 _out _code
   shift 3
   _out=$(PATH="$NO_CURL_BIN" FM_HOME="$HOME_DIR" DISPATCH_SYSTEMONE_PROVIDER=typesafe \
-    TYPESAFE_API_KEY="$KEY" LAYA_API_KEY= LAYA_SYSTEMONE_BASE_URL= "$TOOL" "$@" 2> "$TMP_ROOT/stderr")
+    TYPESAFE_API_KEY="$KEY" LAYA_API_KEY='' LAYA_SYSTEMONE_BASE_URL='' "$TOOL" "$@" 2> "$TMP_ROOT/stderr")
   _code=$?
   printf -v "$__exit" '%s' "$_code"
   printf -v "$__out" '%s' "$_out"
