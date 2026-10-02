@@ -1534,7 +1534,7 @@ def validate_task(task_id, intent_file):
     if forge == "gerrit":
         command.extend(["--skip", "push,pr,ci"])
     result = run(command,
-                 cwd=ctx["worktree"], env=cli_env(), capture=False, check=False)
+                 cwd=ctx["worktree"], env=os.environ.copy(), capture=False, check=False)
     if result is None:
         fail("no-mistakes is unavailable on the host")
     return result.returncode
