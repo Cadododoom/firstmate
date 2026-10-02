@@ -36,7 +36,9 @@ if "workspace" in args and "get" in args:
 ''')
     fake.chmod(0o755)
     env = dict(os.environ, PATH=str(base) + os.pathsep + os.environ["PATH"],
-               COMMAND_LOG=str(log), WORKSPACE_ID_FILE=str(identity), OPENSHELL_WORKSPACE="other")
+               COMMAND_LOG=str(log), WORKSPACE_ID_FILE=str(identity), OPENSHELL_WORKSPACE="other",
+               SSH_AUTH_SOCK=str(base / "host-agent.sock"), GIT_SSH_COMMAND="host-ssh-command",
+               GIT_CONFIG_GLOBAL=str(base / "host-gitconfig"))
     ctx = dict(id="task", home=base, state=base, gateway="local", workspace="team",
                workspace_id="workspace-original", journal=base / "journal.json", worktree=base,
                sandbox="task-sandbox", values={})
@@ -82,6 +84,10 @@ if "workspace" in args and "get" in args:
             assert 'model_reasoning_effort="' + expected_effort + '"' in codex
             assert "--dangerously-bypass-approvals-and-sandbox" in codex
             assert "CODEX_HOME=/tmp/fm-codex-home" in args
+            forwarded = dict(args[i + 1].split("=", 1) for i, arg in enumerate(args) if arg == "--env")
+            assert "SSH_AUTH_SOCK" not in forwarded
+            assert "GIT_SSH_COMMAND" not in forwarded
+            assert forwarded["GIT_CONFIG_GLOBAL"] == "/dev/null"
         for options, expected in [([], ("gpt-6.1-sol", "medium")),
                                   (["--model", "custom", "--effort", "high"], ("custom", "high"))]:
             with patch.object(sys, "argv", ["runner", "run", "task", "brief", *options]), patch.object(runner, "run_task", return_value=0) as launch:
@@ -312,22 +318,47 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
         intent = base / "intent.txt"
         intent.write_text("authoritative task intent")
         nm = base / "no-mistakes"
-        nm.write_text("#!/usr/bin/env python3\nimport json, os, sys\nfrom pathlib import Path\nPath(os.environ['NM_LOG']).write_text(json.dumps({'argv':sys.argv[1:], 'cwd':os.getcwd()}))\n")
+        nm.write_text("""#!/usr/bin/env python3
+import json, os, subprocess, sys
+from pathlib import Path
+helper = subprocess.check_output(['git', 'config', '--global', '--get', 'credential.helper'], text=True).strip()
+auth = {key: os.environ.get(key) for key in ('SSH_AUTH_SOCK', 'GIT_SSH_COMMAND', 'GIT_CONFIG_GLOBAL')}
+Path(os.environ['NM_LOG']).write_text(json.dumps({'argv':sys.argv[1:], 'cwd':os.getcwd(), 'auth':auth, 'helper':helper}))
+""")
         nm.chmod(0o755)
         nm_log = base / "nm-log.json"
         data = ctx["home"] / "data"
         data.mkdir()
         registry = data / "projects.md"
         registry.write_text("- host [no-mistakes] - test project (added 2026-10-02)\n")
-        with patch.dict(os.environ, NM_LOG=str(nm_log), FM_DATA_OVERRIDE=str(data)), patch.object(runner, "load_context", return_value=ctx), patch.object(runner, "endpoint_agent_free"):
+        host_config = base / "host-gitconfig"
+        host_config.write_text("[credential]\n\thelper = host-test-helper\n")
+        auth = dict(SSH_AUTH_SOCK=str(base / "host-agent.sock"), GIT_SSH_COMMAND="host-ssh-command",
+                    GIT_CONFIG_GLOBAL=str(host_config))
+        real_git = shutil.which("git")
+        git_probe = base / "git"
+        git_probe.write_text("""#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+Path(os.environ['PROBE_AUTH_LOG']).write_text(json.dumps({key: os.environ.get(key) for key in ('SSH_AUTH_SOCK', 'GIT_SSH_COMMAND', 'GIT_CONFIG_GLOBAL')}))
+os.execv(os.environ['REAL_GIT'], [os.environ['REAL_GIT'], *sys.argv[1:]])
+""")
+        git_probe.chmod(0o755)
+        git_auth_log = base / "git-auth.json"
+        with patch.dict(os.environ, **auth, REAL_GIT=real_git, PROBE_AUTH_LOG=str(git_auth_log), NM_LOG=str(nm_log), FM_DATA_OVERRIDE=str(data)), patch.object(runner, "load_context", return_value=ctx), patch.object(runner, "endpoint_agent_free"):
+            for invoke in (runner.git, runner.git_bytes):
+                invoke(ctx["stage"], "rev-parse", "HEAD")
+                assert json.loads(git_auth_log.read_text()) == {
+                    "SSH_AUTH_SOCK": None, "GIT_SSH_COMMAND": None, "GIT_CONFIG_GLOBAL": "/dev/null"}
+            assert runner.git(ctx["stage"], "config", "--global", "--get", "credential.helper", check=False) == ""
             assert runner.validate_task("task", str(intent)) == 0
             delivered = json.loads(nm_log.read_text())
-            assert delivered == {"argv": ["axi", "run", "--intent", intent.read_text()], "cwd": str(ctx["worktree"])}
+            assert delivered == {"argv": ["axi", "run", "--intent", intent.read_text()], "cwd": str(ctx["worktree"]), "auth": auth, "helper": "host-test-helper"}
             nm_log.unlink()
             registry.write_text("- host [no-mistakes forge=gerrit] - test project (added 2026-10-02)\n")
             assert runner.validate_task("task", str(intent)) == 0
             delivered = json.loads(nm_log.read_text())
-            assert delivered == {"argv": ["axi", "run", "--intent", intent.read_text(), "--skip", "push,pr,ci"], "cwd": str(ctx["worktree"])}
+            assert delivered == {"argv": ["axi", "run", "--intent", intent.read_text(), "--skip", "push,pr,ci"], "cwd": str(ctx["worktree"]), "auth": auth, "helper": "host-test-helper"}
             nm_log.unlink()
             registry.write_text("- host [no-mistakes forge=unknown] - test project (added 2026-10-02)\n")
             refuses(lambda: runner.validate_task("task", str(intent)))
@@ -337,6 +368,7 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
             ctx["validation"].write_text(json.dumps(record))
             refuses(lambda: runner.validate_task("task", str(intent)))
             assert not nm_log.exists()
+        git_probe.unlink()
         capability = base / "capability" / "fm-task-capability"
         capability.parent.mkdir()
         shutil.copy2(root / "bin/fm-openshell-capability.py", capability)
