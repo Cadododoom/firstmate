@@ -1073,7 +1073,7 @@ Typed resolution additively recognizes `gemini` because AGENTS.md section 4 veri
 | `claude`, `codex`, `grok`, `kimi`, `cursor`, `agy`, `muse` | The resolver has an authoritative single-provider mapping. |
 | Every other verified harness | Must declare `provider` explicitly; this includes multi-provider `pi`, `pi-signed`, `omp`, and `opencode`, and unmapped `gemini`, `rovo`, and `devin`; omission is an actionable configuration error before any request. |
 
-This single-provider table is separate from the frozen legacy mapping used by `fm-quota-choose.sh`, so additions cannot alter no-key routing.
+This single-provider table is separate from the frozen legacy mapping used by `fm-quota-choose.sh`, so additions cannot alter that helper's routing.
 
 **Profile quota floors**
 
@@ -1129,7 +1129,6 @@ Firstmate invokes the resolve path directly after writing the brief, without a p
 **What the model receives**
 
 When on and at least one rule exists, the tool sends the project name and the brief's task-specific text as state and asks one Choice question whose options are every rule's `when` plus the fixed neutral option for no matching rule; the model never receives quota or account data, provider credentials in its JSON state, catalogs, `why`, `use`, approvals, or confidence floors.
-The provider key is used only as an HTTP bearer header when that provider requires authentication.
 The task-specific text is the brief's `## Captain's intent` and `## Firstmate spec` sections under `# Task` that `bin/fm-brief.sh` scaffolds, read by the same parser that feeds `fm-spawn.sh` validation and the no-mistakes `--intent` contract; a brief with neither section is sent whole.
 
 When the sections are sent from a scout brief, the line `Brief kind: scout (report only)` comes first, taken from the scaffold's scout contract line; ship briefs and briefs sent whole get no kind line.
@@ -1152,7 +1151,7 @@ LAYA_API_KEY=replace-with-the-server-token
 
 The endpoint setting accepts an HTTPS origin or loopback HTTP origin, with no credentials, path, query, or fragment.
 Laya ignores the resolver's `jev-latest` model id and routes the request with its own Router.
-The resolver uses a 30-second request timeout for Laya and the existing 5-second timeout for TypeSafe; a timeout or any provider failure returns `status: error` without changing provider.
+The resolver uses a 30-second request timeout for Laya; a timeout or any provider failure returns `status: error` without changing provider.
 The current TypeSafe provider remains the default, and Laya must be selected separately in each home whose operator intends to use it.
 No Firstmate dispatch-quality or latency benchmark has been run against Laya; results depend on the operator's rules, model checkpoint, hardware, preload settings, and network path, so measure a representative local brief set before relying on it for dispatch.
 
@@ -1223,7 +1222,7 @@ No qualifying option, or two equally probable qualifying options, produces `ambi
 Every result above exits 0.
 
 - Response probabilities must contain exactly every offered choice, use numeric values from 0 through 1, and sum to approximately 1 within 0.01.
-- Only a usage or configuration error exits 2: an unreadable brief, an existing but unreadable or malformed canonical rules file, or missing `jq`, each reported and never selected around.
+- Only a usage or configuration error exits 2: an unsupported `DISPATCH_SYSTEMONE_PROVIDER`, an unreadable brief, an existing but unreadable or malformed canonical rules file, or missing `jq`, each reported and never selected around.
 - Missing `curl` is a normal structured `error` outcome with exit 0 so firstmate uses today's routing.
 
 **Firstmate retains the dispatch decision**
@@ -1237,6 +1236,7 @@ Firstmate passes its profile line unless it states a reason to override, such as
 
 - The resolver and bootstrap keep TypeSafe and Laya keys in non-exported private variables and unset their source environment names before launching child processes.
 - The resolver sends a provider key to `curl` only as an Authorization header read from a file descriptor, never on argv or in the JSON state.
+- A selected provider key containing a carriage return or newline returns `status: error` before any network call.
 - TypeSafe uses `https://api.typesafe.ai/v1/systemone`, model `jev-latest`, the 0.6 default confidence floor, and a 5-second request timeout.
 
 The live rule-match evidence is recorded in [`verification/dispatch-resolve.md`](verification/dispatch-resolve.md).
