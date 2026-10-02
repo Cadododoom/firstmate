@@ -6,7 +6,7 @@ Firstmate can run an individual Herdr Codex ship worker inside NVIDIA OpenShell.
 
 The opt-in supports Linux Herdr Codex ship tasks using the `no-mistakes` delivery mode. It requires an installed OpenShell CLI, a registered and reachable OpenShell gateway, a gateway with the OpenShell `base` image available, and already configured providers. OpenShell's base image includes Codex. The gateway may use a supported compute driver; Firstmate uses OpenShell's sandbox upload and download operations and does not request host bind mounts or disable resource admission.
 
-Scouts and secondmates are refused while the setting applies because their reports or home capabilities live outside the assigned task worktree. Other backends and harnesses remain unchanged. Direct-PR delivery is not supported: the task worker does not receive host `gh-axi`, and OpenShell's standard GitHub profile permits clone and fetch but denies Git push. The `no-mistakes` pipeline runs after the worker commits and handles push and PR creation outside the sandbox.
+Scouts and secondmates are refused while the setting applies because their reports or home capabilities live outside the assigned task worktree. Other backends and harnesses remain unchanged. Direct-PR delivery is not supported: the task worker does not receive host `gh-axi`, and OpenShell's standard GitHub profile permits clone and fetch but denies Git push. The `no-mistakes` pipeline runs after the worker commits, with forge-specific delivery governed by the host validation handoff below.
 
 ## Setup
 
@@ -41,6 +41,7 @@ The relay polls the task channel through OpenShell file transfers while Codex is
 The sandbox cannot pass host paths or task ids to these operations.
 Workspace changes are downloaded and synchronized only to the task's recorded branch using a fast-forward and compare-and-swap check.
 Staged and non-ignored uncommitted changes are preserved.
+File and symlink leaves can become directories, or directories can become leaves, by retiring obsolete leaves before copying replacements; unrelated directory contents refuse replacement and remain intact.
 
 ## Host validation handoff
 
@@ -62,7 +63,9 @@ python3 /path/to/firstmate-code/bin/fm-openshell-codex.py validate TASK_ID \
 ```
 
 This command requires the Herdr endpoint to be dead or missing, the recorded workspace ID to remain valid, the sandbox to be absent, and the host branch, clean worktree, and HEAD to match the handoff.
-It invokes `no-mistakes axi run` only in that task's host worktree and returns its exit code and output.
+It resolves the recorded project's forge through `fm-project-mode.sh` and invokes `no-mistakes axi run` only in that task's host worktree, returning its exit code and output.
+For a registered Gerrit project it passes exactly `--skip push,pr,ci`; all other validation phases still run, and the existing Gerrit publication contract remains on the host.
+Other supported forges receive no additional skips; an invalid registered forge refuses validation.
 The host must already have an initialized no-mistakes repository and its normal validation toolchain; setup failures remain explicit failures.
 Firstmate handles subsequent gates and outcomes through the normal no-mistakes workflow on the host.
 The sandbox receives no host validation credentials, mounts, or additional policy permissions.
