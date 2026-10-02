@@ -1129,7 +1129,6 @@ Firstmate invokes the resolve path directly after writing the brief, without a p
 **What the model receives**
 
 When on and at least one rule exists, the tool sends the project name and the brief's task-specific text as state and asks one Choice question whose options are every rule's `when` plus the fixed neutral option for no matching rule; the model never receives quota or account data, provider credentials in its JSON state, catalogs, `why`, `use`, approvals, or confidence floors.
-The provider key is used only as an HTTP bearer header when that provider requires authentication.
 The task-specific text is the brief's `## Captain's intent` and `## Firstmate spec` sections under `# Task` that `bin/fm-brief.sh` scaffolds, read by the same parser that feeds `fm-spawn.sh` validation and the no-mistakes `--intent` contract; a brief with neither section is sent whole.
 
 When the sections are sent from a scout brief, the line `Brief kind: scout (report only)` comes first, taken from the scaffold's scout contract line; ship briefs and briefs sent whole get no kind line.
@@ -1152,7 +1151,7 @@ LAYA_API_KEY=replace-with-the-server-token
 
 The endpoint setting accepts an HTTPS origin or loopback HTTP origin, with no credentials, path, query, or fragment.
 Laya ignores the resolver's `jev-latest` model id and routes the request with its own Router.
-The resolver uses a 30-second request timeout for Laya and the existing 5-second timeout for TypeSafe; a timeout or any provider failure returns `status: error` without changing provider.
+The resolver uses a 30-second request timeout for Laya; a timeout or any provider failure returns `status: error` without changing provider.
 The current TypeSafe provider remains the default, and Laya must be selected separately in each home whose operator intends to use it.
 No Firstmate dispatch-quality or latency benchmark has been run against Laya; results depend on the operator's rules, model checkpoint, hardware, preload settings, and network path, so measure a representative local brief set before relying on it for dispatch.
 
