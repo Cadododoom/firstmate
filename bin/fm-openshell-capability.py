@@ -24,7 +24,8 @@ def usage():
     print(
         "usage: fm-task-capability inbox list|read|ack [NNN.msg]\n"
         "       fm-task-capability status append '<one status line>'\n"
-        "       fm-task-capability turn-ended",
+        "       fm-task-capability turn-ended\n"
+        "       fm-task-capability validation request",
         file=sys.stderr,
     )
     return 2
@@ -98,6 +99,8 @@ def main():
             text = request({"op": "inbox.ack", "name": args[2]})
         elif len(args) == 3 and args[:2] == ["status", "append"]:
             text = request({"op": "status.append", "line": args[2]})
+        elif args == ["validation", "request"]:
+            text = request({"op": "validation.request"})
         elif args == ["turn-ended"]:
             text = request({"op": "turn-ended"})
         else:

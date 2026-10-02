@@ -118,7 +118,7 @@ def git_bytes(repo, *args, input_bytes=None, check=True):
     return None if result is None else result.stdout
 
 
-def load_context(task_id):
+def load_context(task_id, *, require_live=True):
     if not TASK_ID_RE.fullmatch(task_id):
         fail("invalid task id")
     root = Path(os.environ.get("FM_ROOT_OVERRIDE") or Path(__file__).resolve().parents[1]).resolve()
@@ -168,19 +168,23 @@ def load_context(task_id):
     validate_workspace(workspace, workspace_id)
     worktree_value = values.get("worktree", "")
     worktree_input = Path(worktree_value)
-    if not worktree_input.is_absolute() or worktree_input.is_symlink() or not worktree_input.is_dir():
+    if (not worktree_input.is_absolute() or worktree_input.is_symlink()
+            or (worktree_input.exists() and not worktree_input.is_dir())
+            or (require_live and not worktree_input.is_dir())):
         fail("assigned task worktree is missing or is a symlink")
     worktree = worktree_input.resolve()
     tasktmp_value = values.get("tasktmp", "")
     if not tasktmp_value or not Path(tasktmp_value).is_absolute():
         fail("task temp root is missing or is not absolute")
     tasktmp = Path(tasktmp_value)
-    if not tasktmp.is_absolute() or tasktmp.is_symlink() or not tasktmp.is_dir():
+    if (not tasktmp.is_absolute() or tasktmp.is_symlink()
+            or (tasktmp.exists() and not tasktmp.is_dir())
+            or (require_live and not tasktmp.is_dir())):
         fail("task temp root is missing or unsafe")
     tasktmp = tasktmp.resolve()
     if tasktmp_value != "/tmp/fm-" + task_id:
         fail("task temp root does not match Firstmate's task-scoped temp path")
-    if tasktmp.stat().st_uid != os.getuid() or tasktmp.stat().st_mode & 0o077:
+    if tasktmp.exists() and (tasktmp.stat().st_uid != os.getuid() or tasktmp.stat().st_mode & 0o077):
         fail("task temp root is not private to the launching user")
     branch = values.get("branch", "")
     checked = run(["git", "check-ref-format", "--branch", branch], env=cli_env(), capture=True, check=False) if branch else None
@@ -204,6 +208,7 @@ def load_context(task_id):
         "stage_root": tasktmp / "openshell-codex",
         "stage": tasktmp / "openshell-codex" / "workspace",
         "journal": tasktmp / "openshell-codex-state.json",
+        "validation": state_dir / (task_id + ".openshell-validation.json"),
         "bridge_dir": tasktmp / "openshell-codex-bridge",
         "channel": tasktmp / "openshell-codex-bridge" / "inbox",
         "responses": tasktmp / "openshell-codex-bridge" / "responses",
@@ -1010,7 +1015,17 @@ def channel_request(ctx, request_id, request):
         if op == "inbox.ack" and set(request) == {"op", "name"} and isinstance(request["name"], str):
             text = inbox_ack(ctx, request["name"])
             refresh_inbox_mirror(ctx)
+        elif op == "validation.request" and set(request) == {"op"}:
+            journal = read_journal(ctx)
+            if not journal or journal.get("phase") != "agent-running":
+                fail("host validation can only be requested by the running task")
+            journal["validation_requested"] = True
+            write_journal(ctx, journal)
+            ctx["validation_requested"] = True
+            text = "host validation handoff requested; this sandbox session will end"
         elif op == "status.append" and set(request) == {"op", "line"} and isinstance(request["line"], str):
+            if request["line"].startswith("done "):
+                fail("use validation request; the host reports readiness after synchronization")
             text = status_append(ctx, request["line"])
         elif op == "turn-ended" and set(request) == {"op"}:
             text = turn_ended(ctx)
@@ -1085,6 +1100,13 @@ def encoded_prompt(ctx, brief_path):
         "This worker runs inside an OpenShell sandbox. Host paths named below are not mounted. "
         "This channel overlay takes precedence for inbox, status, and turn-end operations. "
         "The host relays these exact operations through OpenShell's sandbox file-transfer API.\n\n"
+        "For no-mistakes delivery, this overlay also replaces host setup and validation instructions. "
+        "Do not run no-mistakes doctor, init, or validation inside the sandbox. "
+        "Implement the task, commit all project changes on the assigned branch, and leave a clean worktree. "
+        f"Then run `{CAPABILITY_IN_SANDBOX} validation request` instead of appending done. "
+        "This ends this sandbox session. The host synchronizes the committed tracked files before "
+        "reporting readiness, and firstmate runs the explicit host validation command described in "
+        "docs/openshell-codex.md with the task's authoritative intent. Do not push from the sandbox.\n\n"
         "Read the assigned steering messages in numeric order with "
         f"`{CAPABILITY_IN_SANDBOX} inbox list`, read each with "
         f"`{CAPABILITY_IN_SANDBOX} inbox read NNN.msg`, then acknowledge it with "
@@ -1125,7 +1147,6 @@ def create_sandbox(ctx, journal):
     archive_path = workspace_archive(ctx)
     upload_file(ctx, archive_path, "/sandbox")
     extract_workspace(ctx, archive_path)
-    archive_path.unlink()
     journal["phase"] = "workspace-uploaded"
     write_journal(ctx, journal)
     ctx["inbox_fingerprint"] = refresh_inbox_mirror(ctx)
@@ -1189,10 +1210,24 @@ def run_codex(ctx, journal, prompt, model, effort):
             now = time.monotonic()
             if now >= next_sync:
                 sync_channels(ctx)
+                if ctx.get("validation_requested"):
+                    journal["validation_requested"] = True
+                    write_journal(ctx, journal)
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    break
                 next_sync = now + 1.0
             time.sleep(0.1)
         result = process.wait()
         sync_channels(ctx)
+        if ctx.get("validation_requested"):
+            journal["validation_requested"] = True
+            write_journal(ctx, journal)
+            return 0
         return result
     except Exception:
         if process.poll() is None:
@@ -1260,12 +1295,18 @@ def check_host_unchanged(ctx, journal):
 
 def backup_host(ctx, journal):
     backup = ctx["stage_root"] / "host-backup"
-    if backup.exists() or backup.is_symlink():
-        fail("task recovery backup already exists")
+    if backup.is_symlink():
+        fail("task recovery backup is unsafe")
+    if backup.exists():
+        if journal.get("phase") != "snapshot-downloaded" or not backup.is_dir():
+            fail("task recovery backup already exists")
+        check_host_unchanged(ctx, journal)
+        shutil.rmtree(str(backup))
     backup.mkdir(mode=0o700)
+    (backup / "files").mkdir(mode=0o700)
     for path in journal["base_paths"]:
         if journal["base_files"][path]["kind"] != "missing":
-            copy_path(ctx["worktree"], backup, path, journal["base_files"])
+            copy_path(ctx["worktree"], backup / "files", path, journal["base_files"])
     shutil.copy2(str(task_index_path(ctx["worktree"])), str(backup / "index"))
     return backup
 
@@ -1285,19 +1326,21 @@ def restore_host(ctx, journal, backup, final_head=None):
         expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
         if not same_content(actual, {"kind": "missing"}) and not same_content(actual, expected):
             fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
-        copy_path(backup, wt, path)
+        copy_path(backup / "files", wt, path)
     for path in journal["base_paths"]:
         actual = state_for(wt, path)
         baseline_state = journal["base_files"][path]
         expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
         if not same_content(actual, baseline_state) and not same_content(actual, expected):
             fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
-        copy_path(backup, wt, path, journal["base_files"])
+        copy_path(backup / "files", wt, path, journal["base_files"])
     shutil.copy2(str(backup / "index"), str(task_index_path(wt)))
 
 
 def sync_workspace(ctx, journal):
     head, staged_patch, paths, states = verify_stage(ctx, journal)
+    if journal.get("validation_requested"):
+        require_committed_workspace(ctx["stage"])
     check_host_unchanged(ctx, journal)
     backup = backup_host(ctx, journal)
     journal["phase"] = "syncing"
@@ -1325,7 +1368,7 @@ def sync_workspace(ctx, journal):
         existing = set(journal["base_paths"])
         incoming = set(paths)
         for rel in sorted(existing - incoming, key=os.fsencode):
-            copy_path(backup, ctx["worktree"], rel, journal["base_files"])
+            copy_path(backup / "files", ctx["worktree"], rel, journal["base_files"])
             target = ctx["worktree"] / rel
             try:
                 info = target.lstat()
@@ -1345,6 +1388,8 @@ def sync_workspace(ctx, journal):
                 copy_path(ctx["stage"], ctx["worktree"], rel, journal["base_files"])
         run(["git", "-C", str(ctx["worktree"]), "update-ref", "-d", temporary_ref], env=cli_env(), capture=True, check=False)
         journal["phase"] = "synced"
+        if journal.get("validation_requested"):
+            journal["validation_head"] = head
         for key in ("sync_head", "sync_paths", "sync_files"):
             journal.pop(key, None)
         write_journal(ctx, journal)
@@ -1356,6 +1401,7 @@ def sync_workspace(ctx, journal):
             for key in ("sync_head", "sync_paths", "sync_files"):
                 journal.pop(key, None)
             write_journal(ctx, journal)
+            shutil.rmtree(str(backup))
         except Exception as rollback_error:
             fail("OpenShell worktree sync failed and rollback is incomplete: " + str(rollback_error))
         raise
@@ -1406,6 +1452,7 @@ def run_task(task_id, brief_path, model, effort):
         download_workspace(ctx, journal)
         sync_workspace(ctx, journal)
         delete_sandbox(ctx)
+        publish_validation_handoff(ctx, journal)
         cleanup_artifacts(ctx)
         return agent_rc
     except BaseException:
@@ -1415,6 +1462,54 @@ def run_task(task_id, brief_path, model, effort):
             except Exception as stop_error:
                 print("fm-openshell-codex: could not confirm sandbox stop; recovery artifacts remain: " + str(stop_error), file=sys.stderr)
         raise
+
+
+def require_committed_workspace(worktree):
+    if git(worktree, "status", "--porcelain", "--untracked-files=all"):
+        fail("host validation handoff requires committed tracked changes and a clean worktree")
+
+
+def publish_validation_handoff(ctx, journal):
+    if not journal.get("validation_requested"):
+        return
+    if journal.get("phase") != "synced":
+        fail("host validation handoff requires a synchronized task snapshot")
+    require_committed_workspace(ctx["worktree"])
+    head = git(ctx["worktree"], "rev-parse", "HEAD")
+    if head != journal.get("validation_head"):
+        fail("host validation handoff HEAD differs from the synchronized snapshot")
+    record = {"task_id": ctx["id"], "worktree": str(ctx["worktree"]), "branch": ctx["branch"],
+              "head": head, "gateway": ctx["gateway"],
+              "workspace": ctx["workspace"], "workspace_id": ctx["workspace_id"]}
+    atomic_write(ctx["validation"], (json.dumps(record, sort_keys=True) + "\n").encode("utf-8"))
+    status_append(ctx, "done [at=" + str(int(time.time())) + "]: committed OpenShell snapshot ready for host validation at " + head)
+
+
+def validate_task(task_id, intent_file):
+    ctx = load_context(task_id, require_live=False)
+    endpoint_agent_free(ctx)
+    guard_task(task_id)
+    path = ctx["validation"]
+    if path.is_symlink() or not path.is_file():
+        fail("task has no safe host validation handoff record")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    expected = {"task_id": ctx["id"], "worktree": str(ctx["worktree"]), "branch": ctx["branch"],
+                "head": git(ctx["worktree"], "rev-parse", "HEAD"),
+                "gateway": ctx["gateway"], "workspace": ctx["workspace"], "workspace_id": ctx["workspace_id"]}
+    if record != expected or git(ctx["worktree"], "symbolic-ref", "--short", "HEAD") != ctx["branch"]:
+        fail("host validation handoff does not match the task's current identity and HEAD")
+    require_committed_workspace(ctx["worktree"])
+    intent_path = Path(intent_file)
+    if intent_path.is_symlink() or not intent_path.is_file():
+        fail("host validation requires a regular task intent file")
+    intent = intent_path.read_text(encoding="utf-8")
+    if not intent.strip():
+        fail("host validation requires the task's authoritative intent")
+    result = run(["no-mistakes", "axi", "run", "--intent", intent],
+                 cwd=ctx["worktree"], env=cli_env(), capture=False, check=False)
+    if result is None:
+        fail("no-mistakes is unavailable on the host")
+    return result.returncode
 
 
 def endpoint_agent_free(ctx):
@@ -1438,7 +1533,7 @@ def endpoint_agent_free(ctx):
 
 
 def recover_task(task_id):
-    ctx = load_context(task_id)
+    ctx = load_context(task_id, require_live=False)
     endpoint_agent_free(ctx)
     journal = read_journal(ctx)
     exists = sandbox_get(ctx)
@@ -1447,6 +1542,8 @@ def recover_task(task_id):
             fail("sandbox exists without its task recovery journal; preserve it for manual inspection")
         return
     phase = journal.get("phase")
+    if phase != "synced":
+        ctx = load_context(task_id)
     if phase == "prepared" and exists:
         fail("an OpenShell sandbox exists before its ownership was recorded; preserve it for manual inspection")
     if phase in ("prepared", "sandbox-created", "workspace-uploaded"):
@@ -1462,29 +1559,30 @@ def recover_task(task_id):
     if phase in ("agent-running", "agent-exited", "downloading") and not exists:
         fail("OpenShell sandbox disappeared before its workspace snapshot was recovered; preserving task artifacts")
     recovering_sync = phase == "syncing"
-    if exists and phase != "synced":
-        stop_then_start_sandbox(ctx)
-        download_workspace(ctx, journal)
     if recovering_sync:
         backup = ctx["stage_root"] / "host-backup"
         if not backup.is_dir() or backup.is_symlink():
             fail("OpenShell sync was interrupted without a complete rollback backup")
         restore_host(ctx, journal, backup, journal.get("sync_head"))
-        shutil.rmtree(str(backup))
         journal["phase"] = "snapshot-downloaded"
         for key in ("sync_head", "sync_paths", "sync_files"):
             journal.pop(key, None)
         write_journal(ctx, journal)
+        shutil.rmtree(str(backup))
+    if exists and phase != "synced":
+        stop_then_start_sandbox(ctx)
+        download_workspace(ctx, journal)
     if journal.get("phase") != "synced":
         sync_workspace(ctx, journal)
     if exists:
         delete_sandbox(ctx)
+    publish_validation_handoff(ctx, journal)
     cleanup_artifacts(ctx)
     print("recovered the OpenShell worktree snapshot for " + task_id)
 
 
 def guard_task(task_id):
-    ctx = load_context(task_id)
+    ctx = load_context(task_id, require_live=False)
     journal = read_journal(ctx)
     if sandbox_get(ctx):
         fail("task has a retained OpenShell sandbox; recover it before teardown")
@@ -1503,6 +1601,9 @@ def main():
     workspace_parser = sub.add_parser("workspace-id")
     workspace_parser.add_argument("gateway")
     workspace_parser.add_argument("workspace")
+    validate_parser = sub.add_parser("validate")
+    validate_parser.add_argument("task_id")
+    validate_parser.add_argument("--intent-file", required=True)
     sub.add_parser("recover").add_argument("task_id")
     sub.add_parser("guard").add_argument("task_id")
     sub.add_parser("cleanup").add_argument("task_id")
@@ -1513,6 +1614,8 @@ def main():
             return 0
         if args.action == "run":
             return run_task(args.task_id, args.brief, args.model, args.effort)
+        if args.action == "validate":
+            return validate_task(args.task_id, args.intent_file)
         if args.action == "recover":
             recover_task(args.task_id)
             return 0
@@ -1520,7 +1623,7 @@ def main():
             guard_task(args.task_id)
             return 0
         if args.action == "cleanup":
-            ctx = load_context(args.task_id)
+            ctx = load_context(args.task_id, require_live=False)
             cleanup_artifacts(ctx)
             return 0
     except Refusal as exc:
