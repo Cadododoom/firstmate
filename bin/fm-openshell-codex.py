@@ -286,10 +286,12 @@ def state_for(root, rel):
         except FileNotFoundError:
             return {"kind": "missing"}
         if not stat.S_ISDIR(parent_mode):
-            fail("refusing to inspect a worktree path through a non-directory parent: " + rel)
+            return {"kind": "missing"}
     try:
         info = path.lstat()
     except FileNotFoundError:
+        return {"kind": "missing"}
+    if stat.S_ISDIR(info.st_mode):
         return {"kind": "missing"}
     if stat.S_ISLNK(info.st_mode):
         return {"kind": "symlink", "target": os.readlink(str(path))}
@@ -316,10 +318,42 @@ def snapshot(root, paths):
     return {path: state_for(root, path) for path in paths}
 
 
+def remove_leaf(root, rel):
+    current = root
+    for part in rel.split("/")[:-1]:
+        current = current / part
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            return
+        if not stat.S_ISDIR(mode):
+            return
+    target = root / rel
+    try:
+        mode = target.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(mode):
+        return
+    if not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+        fail("refusing to remove an unsupported worktree entry: " + rel)
+    target.unlink()
+    parent = target.parent
+    while parent != root:
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+        parent = parent.parent
+
+
 def copy_path(source_root, dest_root, rel, baseline=None):
     validate_relative(rel)
     source = source_root / rel
     target = dest_root / rel
+    if state_for(source_root, rel)["kind"] == "missing":
+        remove_leaf(dest_root, rel)
+        return
     for root, path in ((source_root, source), (dest_root, target)):
         current = root
         for part in rel.split("/")[:-1]:
@@ -332,27 +366,16 @@ def copy_path(source_root, dest_root, rel, baseline=None):
                 continue
             if not stat.S_ISDIR(mode):
                 fail("refusing to follow a non-directory parent in " + rel)
-    try:
-        info = source.lstat()
-    except FileNotFoundError:
-        try:
-            target_info = target.lstat()
-        except FileNotFoundError:
-            return
-        if stat.S_ISDIR(target_info.st_mode):
-            try:
-                target.rmdir()
-            except OSError:
-                fail("refusing to remove a non-empty worktree path: " + rel)
-        else:
-            target.unlink()
-        return
+    info = source.lstat()
     try:
         old = target.lstat()
     except FileNotFoundError:
         old = None
     if old and stat.S_ISDIR(old.st_mode):
-        fail("worktree file would replace a directory: " + rel)
+        try:
+            target.rmdir()
+        except OSError:
+            fail("worktree file would replace a directory containing unrelated data: " + rel)
     if stat.S_ISLNK(info.st_mode):
         link = os.readlink(str(source))
         normalized_link = os.path.normpath(os.path.join(os.path.dirname(rel), link))
@@ -387,6 +410,16 @@ def copy_path(source_root, dest_root, rel, baseline=None):
             os.unlink(tmp_name)
         except FileNotFoundError:
             pass
+
+
+def apply_files(source_root, dest_root, paths, states, baseline, expected):
+    deletions = {path for path in paths if states.get(path, {}).get("kind", "missing") == "missing"}
+    ordered = sorted(deletions, key=lambda path: (-path.count("/"), os.fsencode(path)))
+    ordered.extend(sorted(set(paths) - deletions, key=os.fsencode))
+    for rel in ordered:
+        if not same_content(state_for(dest_root, rel), expected.get(rel, {"kind": "missing"})):
+            fail("task worktree changed during OpenShell file transition: " + rel)
+        copy_path(source_root, dest_root, rel, baseline)
 
 
 def safe_origin(repo):
@@ -1106,7 +1139,9 @@ def encoded_prompt(ctx, brief_path):
         f"Then run `{CAPABILITY_IN_SANDBOX} validation request` instead of appending done. "
         "This ends this sandbox session. The host synchronizes the committed tracked files before "
         "reporting readiness, and firstmate runs the explicit host validation command described in "
-        "docs/openshell-codex.md with the task's authoritative intent. Do not push from the sandbox.\n\n"
+        "docs/openshell-codex.md with the task's authoritative intent. The registered forge contract "
+        "still applies: Gerrit validation skips exactly push,pr,ci and its later publication stays on "
+        "the host; other registered forges receive no additional skips. Do not push from the sandbox.\n\n"
         "Read the assigned steering messages in numeric order with "
         f"`{CAPABILITY_IN_SANDBOX} inbox list`, read each with "
         f"`{CAPABILITY_IN_SANDBOX} inbox read NNN.msg`, then acknowledge it with "
@@ -1313,6 +1348,15 @@ def backup_host(ctx, journal):
 
 def restore_host(ctx, journal, backup, final_head=None):
     wt = ctx["worktree"]
+    baseline = set(journal["base_paths"])
+    paths = baseline | set(journal.get("sync_paths", []))
+    current_states = snapshot(wt, sorted(paths, key=os.fsencode))
+    for path in sorted(paths, key=os.fsencode):
+        actual = current_states[path]
+        baseline_state = journal["base_files"].get(path, {"kind": "missing"})
+        expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
+        if not same_content(actual, baseline_state) and not same_content(actual, expected):
+            fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
     if final_head and final_head != journal["base_head"]:
         current = git(wt, "rev-parse", "refs/heads/" + ctx["branch"])
         if current == final_head:
@@ -1320,20 +1364,7 @@ def restore_host(ctx, journal, backup, final_head=None):
         elif current != journal["base_head"]:
             fail("task branch changed during OpenShell rollback; preserving recovery artifacts")
     run(["git", "-C", str(wt), "read-tree", journal["base_head"]], env=cli_env(), capture=True)
-    baseline = set(journal["base_paths"])
-    for path in sorted(set(journal.get("sync_paths", [])) - baseline, key=os.fsencode):
-        actual = state_for(wt, path)
-        expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
-        if not same_content(actual, {"kind": "missing"}) and not same_content(actual, expected):
-            fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
-        copy_path(backup / "files", wt, path)
-    for path in journal["base_paths"]:
-        actual = state_for(wt, path)
-        baseline_state = journal["base_files"][path]
-        expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
-        if not same_content(actual, baseline_state) and not same_content(actual, expected):
-            fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
-        copy_path(backup / "files", wt, path, journal["base_files"])
+    apply_files(backup / "files", wt, paths, journal["base_files"], journal["base_files"], current_states)
     shutil.copy2(str(backup / "index"), str(task_index_path(wt)))
 
 
@@ -1365,27 +1396,13 @@ def sync_workspace(ctx, journal):
         run(["git", "-C", str(ctx["worktree"]), "read-tree", head], env=cli_env(), capture=True)
         if staged_patch:
             run(["git", "-C", str(ctx["worktree"]), "apply", "--cached", "--binary", "--whitespace=nowarn", "-"], env=cli_env(), input_bytes=staged_patch, capture=True)
-        existing = set(journal["base_paths"])
-        incoming = set(paths)
-        for rel in sorted(existing - incoming, key=os.fsencode):
-            copy_path(backup / "files", ctx["worktree"], rel, journal["base_files"])
-            target = ctx["worktree"] / rel
-            try:
-                info = target.lstat()
-            except FileNotFoundError:
-                continue
-            if stat.S_ISDIR(info.st_mode):
-                try:
-                    target.rmdir()
-                except OSError:
-                    fail("sandbox removed a worktree file whose directory now contains unrelated data")
-            else:
-                target.unlink()
-        all_paths = incoming | existing
-        all_states = snapshot(ctx["stage"], sorted(all_paths, key=os.fsencode))
-        for rel in sorted(all_paths, key=os.fsencode):
-            if all_states.get(rel, {}).get("kind") != "missing":
-                copy_path(ctx["stage"], ctx["worktree"], rel, journal["base_files"])
+        present = {path for path in paths if states[path]["kind"] != "missing"}
+        obsolete = set(journal["base_paths"]) - set(paths)
+        for path in set(paths) - present:
+            if any(other.startswith(path + "/") or path.startswith(other + "/") for other in present):
+                obsolete.add(path)
+        all_paths = present | obsolete
+        apply_files(ctx["stage"], ctx["worktree"], all_paths, states, journal["base_files"], journal["base_files"])
         run(["git", "-C", str(ctx["worktree"]), "update-ref", "-d", temporary_ref], env=cli_env(), capture=True, check=False)
         journal["phase"] = "synced"
         if journal.get("validation_requested"):
@@ -1505,7 +1522,18 @@ def validate_task(task_id, intent_file):
     intent = intent_path.read_text(encoding="utf-8")
     if not intent.strip():
         fail("host validation requires the task's authoritative intent")
-    result = run(["no-mistakes", "axi", "run", "--intent", intent],
+    project = Path(ctx["values"].get("project", ""))
+    if not project.is_absolute():
+        fail("host validation requires the task's recorded project")
+    result = run(["bash", str(ctx["root"] / "bin" / "fm-project-mode.sh"), "--forge", project.name],
+                 env={**os.environ, "FM_HOME": str(ctx["home"]), "FM_ROOT_OVERRIDE": str(ctx["root"])}, capture=True)
+    forge = result.stdout.decode("utf-8").strip()
+    if forge not in ("none", "gerrit"):
+        fail("task project has an unsupported registered forge")
+    command = ["no-mistakes", "axi", "run", "--intent", intent]
+    if forge == "gerrit":
+        command.extend(["--skip", "push,pr,ci"])
+    result = run(command,
                  cwd=ctx["worktree"], env=cli_env(), capture=False, check=False)
     if result is None:
         fail("no-mistakes is unavailable on the host")

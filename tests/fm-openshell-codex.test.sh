@@ -116,7 +116,7 @@ if 'workspace' in args and 'get' in args:
 elif 'sandbox' in args and 'get' in args:
     print('sandbox not found', file=sys.stderr)
     sys.exit(1)
-elif 'codex' in args:
+elif '--' in args and args[args.index('--') + 1] == 'codex':
     time.sleep(20)
 """)
     fake.chmod(0o755)
@@ -143,7 +143,7 @@ elif 'codex' in args:
         state.mkdir()
         responses = area / "responses"
         responses.mkdir()
-        ctx = dict(id="task", root=root, home=area, state=state, config=area / "config", values={},
+        ctx = dict(id="task", root=root, home=area, state=state, config=area / "config", values={"project": str(wt)},
                    gateway="local", workspace="team", workspace_id="exact-id", branch="task", sandbox="task-sandbox", providers=["codex"],
                    worktree=wt, stage_root=stage_root, stage=stage, journal=area / "journal.json",
                    policy=area / "policy.yaml", bridge_dir=area / "bridge", responses=responses,
@@ -199,6 +199,90 @@ elif 'codex' in args:
         assert runner.read_journal(ctx)["phase"] == "snapshot-downloaded"
         runner.sync_workspace(ctx, runner.read_journal(ctx))
         assert runner.read_journal(ctx)["phase"] == "synced"
+        def transition_case(name, direction, leaf_kind="file", representation="committed"):
+            ctx, old = make_repo(name)
+            wt, stage = ctx["worktree"], ctx["stage"]
+            if direction == "to-directory":
+                if leaf_kind == "symlink":
+                    (wt / "a").symlink_to("payload")
+                else:
+                    (wt / "a").write_text("old leaf")
+            else:
+                (wt / "a" / "deep").mkdir(parents=True)
+                (wt / "a" / "deep" / "b").write_text("old child")
+            runner.git(wt, "add", ".")
+            runner.git(wt, "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "transition baseline")
+            shutil.rmtree(stage)
+            runner.run(["git", "clone", "-q", "--no-hardlinks", str(wt), str(stage)], env=runner.cli_env())
+            paths = runner.git_paths(wt)
+            old.update(base_head=runner.git(wt, "rev-parse", "HEAD"), base_index_tree=runner.git(wt, "write-tree"),
+                       base_paths=paths, base_files=runner.snapshot(wt, paths))
+            if direction == "to-directory":
+                (stage / "a").unlink()
+                (stage / "a" / "deep").mkdir(parents=True)
+                (stage / "a" / "deep" / "b").write_text("new child")
+            else:
+                shutil.rmtree(stage / "a")
+                if leaf_kind == "symlink":
+                    (stage / "a").symlink_to("payload")
+                else:
+                    (stage / "a").write_text("new leaf")
+            if representation != "unstaged":
+                runner.git(stage, "add", "-A")
+            if representation == "committed":
+                runner.git(stage, "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "transition incoming")
+            runner.write_journal(ctx, old)
+            return ctx, old
+        for representation in ["committed", "staged", "unstaged"]:
+            for direction in ["to-directory", "to-leaf"]:
+                for kind in ["file", "symlink"]:
+                    for interrupted in [False, True]:
+                        ctx, journal = transition_case("transition-" + direction + kind + str(interrupted) + representation, direction, kind, representation)
+                        if interrupted:
+                            original_copy = runner.copy_path
+                            copied = []
+                            def interrupt_copy(source, dest, rel, baseline=None):
+                                result = original_copy(source, dest, rel, baseline)
+                                if source == ctx["stage"]:
+                                    copied.append(rel)
+                                    if rel == ("a/deep/b" if direction == "to-directory" else "a"):
+                                        raise runner.Refusal("injected failure after transition copy")
+                                return result
+                            with patch.object(runner, "copy_path", interrupt_copy):
+                                refuses(lambda: runner.sync_workspace(ctx, journal))
+                            assert copied
+                            assert runner.git(ctx["worktree"], "rev-parse", "HEAD") == journal["base_head"]
+                            assert runner.snapshot(ctx["worktree"], journal["base_paths"]) == journal["base_files"]
+                            assert journal["phase"] == "snapshot-downloaded"
+                        runner.sync_workspace(ctx, journal)
+                        assert runner.git(ctx["worktree"], "rev-parse", "HEAD") == runner.git(ctx["stage"], "rev-parse", "HEAD")
+                        assert runner.git(ctx["worktree"], "status", "--porcelain") == runner.git(ctx["stage"], "status", "--porcelain")
+                        target = ctx["worktree"] / "a"
+                        if direction == "to-directory":
+                            assert (target / "deep" / "b").read_text() == "new child"
+                        elif kind == "symlink":
+                            assert os.readlink(target) == "payload"
+                        else:
+                            assert target.read_text() == "new leaf"
+        ctx, journal = transition_case("ignored-transition", "to-leaf")
+        runner.git(ctx["worktree"], "config", "--local", "core.excludesFile", str(ctx["home"] / "excludes"))
+        (ctx["home"] / "excludes").write_text("a/secret\n")
+        secret = ctx["worktree"] / "a" / "secret"
+        secret.write_text("ignored host data")
+        refuses(lambda: runner.sync_workspace(ctx, journal))
+        assert secret.read_text() == "ignored host data"
+        assert (ctx["worktree"] / "a" / "deep" / "b").read_text() == "old child"
+        ctx, journal = transition_case("concurrent-transition", "to-directory")
+        original_apply = runner.apply_files
+        def concurrent_change(source, dest, *args):
+            if source == ctx["stage"]:
+                (dest / "a").write_text("concurrent host data")
+            return original_apply(source, dest, *args)
+        with patch.object(runner, "apply_files", concurrent_change):
+            refuses(lambda: runner.sync_workspace(ctx, journal))
+        assert (ctx["worktree"] / "a").read_text() == "concurrent host data"
+        assert journal["phase"] == "syncing"
+        assert (ctx["stage_root"] / "host-backup").exists()
         ctx, journal = make_repo("archive")
         journal["phase"] = "prepared"
         with patch.object(runner, "refresh_inbox_mirror", return_value="snapshot"):
@@ -231,11 +315,24 @@ elif 'codex' in args:
         nm.write_text("#!/usr/bin/env python3\nimport json, os, sys\nfrom pathlib import Path\nPath(os.environ['NM_LOG']).write_text(json.dumps({'argv':sys.argv[1:], 'cwd':os.getcwd()}))\n")
         nm.chmod(0o755)
         nm_log = base / "nm-log.json"
-        with patch.dict(os.environ, NM_LOG=str(nm_log)), patch.object(runner, "load_context", return_value=ctx), patch.object(runner, "endpoint_agent_free"):
+        data = ctx["home"] / "data"
+        data.mkdir()
+        registry = data / "projects.md"
+        registry.write_text("- host [no-mistakes] - test project (added 2026-10-02)\n")
+        with patch.dict(os.environ, NM_LOG=str(nm_log), FM_DATA_OVERRIDE=str(data)), patch.object(runner, "load_context", return_value=ctx), patch.object(runner, "endpoint_agent_free"):
             assert runner.validate_task("task", str(intent)) == 0
             delivered = json.loads(nm_log.read_text())
             assert delivered == {"argv": ["axi", "run", "--intent", intent.read_text()], "cwd": str(ctx["worktree"])}
             nm_log.unlink()
+            registry.write_text("- host [no-mistakes forge=gerrit] - test project (added 2026-10-02)\n")
+            assert runner.validate_task("task", str(intent)) == 0
+            delivered = json.loads(nm_log.read_text())
+            assert delivered == {"argv": ["axi", "run", "--intent", intent.read_text(), "--skip", "push,pr,ci"], "cwd": str(ctx["worktree"])}
+            nm_log.unlink()
+            registry.write_text("- host [no-mistakes forge=unknown] - test project (added 2026-10-02)\n")
+            refuses(lambda: runner.validate_task("task", str(intent)))
+            assert not nm_log.exists()
+            registry.write_text("- host [no-mistakes] - test project (added 2026-10-02)\n")
             record["workspace_id"] = "other"
             ctx["validation"].write_text(json.dumps(record))
             refuses(lambda: runner.validate_task("task", str(intent)))
