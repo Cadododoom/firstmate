@@ -163,6 +163,9 @@ def load_context(task_id):
         fail("OpenShell sandbox name is not bound to this Firstmate home and task")
     if values.get("openshell_keep_ai_trailers", "0") not in ("0", "1"):
         fail("task metadata has an invalid AI trailer setting")
+    workspace = values.get("openshell_workspace", "")
+    workspace_id = values.get("openshell_workspace_id", "")
+    validate_workspace(workspace, workspace_id)
     worktree_value = values.get("worktree", "")
     worktree_input = Path(worktree_value)
     if not worktree_input.is_absolute() or worktree_input.is_symlink() or not worktree_input.is_dir():
@@ -190,6 +193,8 @@ def load_context(task_id):
         "state": state_dir,
         "config": config_dir,
         "gateway": gateway,
+        "workspace": workspace,
+        "workspace_id": workspace_id,
         "meta": meta,
         "values": values,
         "providers": providers,
@@ -219,11 +224,15 @@ def read_journal(ctx):
         fail("OpenShell recovery journal is unreadable: " + str(exc))
     if data.get("task_id") != ctx["id"] or data.get("worktree") != str(ctx["worktree"]):
         fail("OpenShell recovery journal identity does not match this task")
+    if data.get("workspace") != ctx["workspace"] or data.get("workspace_id") != ctx["workspace_id"]:
+        fail("OpenShell recovery journal workspace does not match this task")
     return data
 
 
 def write_journal(ctx, data):
     path = ctx["journal"]
+    data["workspace"] = ctx["workspace"]
+    data["workspace_id"] = ctx["workspace_id"]
     data["task_id"] = ctx["id"]
     data["worktree"] = str(ctx["worktree"])
     tmp = path.with_name(path.name + ".tmp")
@@ -917,8 +926,31 @@ def refresh_inbox_mirror(ctx, stage_inbox=None):
     return fingerprint.hexdigest()
 
 
+def validate_workspace(name, workspace_id):
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,17}[a-z0-9])?", name):
+        fail("task has a missing or invalid OpenShell workspace name")
+    if not isinstance(workspace_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", workspace_id):
+        fail("task has a missing or invalid OpenShell workspace ID")
+
+
+def workspace_identity(gateway, name):
+    validate_workspace(name, "lookup")
+    result = run(["openshell", "--gateway", gateway, "--workspace", name,
+                  "--color", "never", "workspace", "get", name], capture=True)
+    text = result.stdout.decode("utf-8", "strict")
+    names = re.findall(r"^  Name: (\S+)\s*$", text, re.MULTILINE)
+    ids = re.findall(r"^  Id: (\S+)\s*$", text, re.MULTILINE)
+    if names != [name] or len(ids) != 1:
+        fail("OpenShell could not establish the exact selected workspace identity")
+    validate_workspace(name, ids[0])
+    return ids[0]
+
+
 def openshell_argv(ctx, *args):
-    return ["openshell", "--gateway", ctx["gateway"], *args]
+    validate_workspace(ctx.get("workspace"), ctx.get("workspace_id"))
+    if workspace_identity(ctx["gateway"], ctx["workspace"]) != ctx["workspace_id"]:
+        fail("OpenShell workspace ID differs from the task's recorded identity")
+    return ["openshell", "--gateway", ctx["gateway"], "--workspace", ctx["workspace"], *args]
 
 
 def openshell_run(ctx, *args, capture=True, check=True, input_bytes=None):
@@ -1129,9 +1161,9 @@ def run_codex(ctx, journal, prompt, model, effort):
         agent_env.update({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": HOOKS_IN_SANDBOX})
     for key, value in agent_env.items():
         args.extend(["--env", key + "=" + value])
-    codex_args = ["codex"]
-    if model and model != "default":
-        codex_args.extend(["--model", model])
+    model = "gpt-6.1-sol" if not model or model == "default" else model
+    effort = "medium" if not effort or effort == "default" else effort
+    codex_args = ["codex", "--model", model]
     if effort in ("low", "medium", "high", "xhigh"):
         codex_args.extend(["-c", "model_reasoning_effort=\"" + effort + "\""])
     elif effort == "max" and model == "gpt-5.6-luna":
@@ -1466,13 +1498,19 @@ def main():
     run_parser = sub.add_parser("run")
     run_parser.add_argument("task_id")
     run_parser.add_argument("brief")
-    run_parser.add_argument("--model", default="default")
-    run_parser.add_argument("--effort", default="default")
+    run_parser.add_argument("--model", default="gpt-6.1-sol")
+    run_parser.add_argument("--effort", default="medium")
+    workspace_parser = sub.add_parser("workspace-id")
+    workspace_parser.add_argument("gateway")
+    workspace_parser.add_argument("workspace")
     sub.add_parser("recover").add_argument("task_id")
     sub.add_parser("guard").add_argument("task_id")
     sub.add_parser("cleanup").add_argument("task_id")
     args = parser.parse_args()
     try:
+        if args.action == "workspace-id":
+            print(workspace_identity(args.gateway, args.workspace))
+            return 0
         if args.action == "run":
             return run_task(args.task_id, args.brief, args.model, args.effort)
         if args.action == "recover":

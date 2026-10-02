@@ -2406,6 +2406,8 @@ fi
 OPENSH_ENABLED=0
 OPENSH_PROVIDERS=
 OPENSH_GATEWAY=
+OPENSH_WORKSPACE=
+OPENSH_WORKSPACE_ID=
 OPENSH_HASH=
 OPENSH_NAME=
 OPENSH_CONFIG="$CONFIG/herdr-codex-openshell"
@@ -2463,6 +2465,12 @@ if [ "$RELAUNCH" -eq 1 ]; then
     }
     OPENSH_PROVIDERS=$(fm_meta_get "$RELAUNCH_META" openshell_providers)
     OPENSH_GATEWAY=$(fm_meta_get "$RELAUNCH_META" openshell_gateway)
+    OPENSH_WORKSPACE=$(fm_meta_get "$RELAUNCH_META" openshell_workspace)
+    OPENSH_WORKSPACE_ID=$(fm_meta_get "$RELAUNCH_META" openshell_workspace_id)
+    [ -n "$OPENSH_WORKSPACE" ] && [ -n "$OPENSH_WORKSPACE_ID" ] || {
+      echo "error: task $ID is missing its recorded OpenShell workspace identity" >&2
+      exit 1
+    }
     opensh_validate_providers "$OPENSH_PROVIDERS" && opensh_validate_gateway "$OPENSH_GATEWAY" || {
       echo "error: task $ID has invalid recorded OpenShell settings; refusing a host Codex fallback" >&2
       exit 1
@@ -2492,6 +2500,18 @@ if [ "$OPENSH_ENABLED" = 1 ]; then
     }
   done
   OPENSH_PYTHON=$(command -v python3)
+  if [ "$RELAUNCH" -eq 0 ]; then
+    OPENSH_WORKSPACE=${OPENSHELL_WORKSPACE-default}
+    OPENSH_WORKSPACE_ID=$("$OPENSH_PYTHON" "$FM_ROOT/bin/fm-openshell-codex.py" workspace-id "$OPENSH_GATEWAY" "$OPENSH_WORKSPACE") || exit 1
+  else
+    OPENSH_CURRENT_WORKSPACE_ID=$("$OPENSH_PYTHON" "$FM_ROOT/bin/fm-openshell-codex.py" workspace-id "$OPENSH_GATEWAY" "$OPENSH_WORKSPACE") || exit 1
+    [ "$OPENSH_CURRENT_WORKSPACE_ID" = "$OPENSH_WORKSPACE_ID" ] || {
+      echo "error: task $ID OpenShell workspace ID has changed; refusing relaunch" >&2
+      exit 1
+    }
+  fi
+  case "${MODEL:-default}" in default) MODEL=gpt-6.1-sol ;; esac
+  case "${EFFORT:-default}" in default) EFFORT=medium ;; esac
   OPENSH_HASH=$(python3 -c 'import hashlib,os,sys; print(hashlib.sha256(os.fsencode(os.path.realpath(sys.argv[1]))+bytes([0])+sys.argv[2].encode()).hexdigest()[:24])' "$FM_HOME" "$ID") || exit 1
   case "$OPENSH_HASH" in *[!0-9a-f]*|'') echo "error: could not derive task-scoped OpenShell names" >&2; exit 1 ;; esac
   OPENSH_NAME="fm-codex-$OPENSH_HASH"
@@ -4995,7 +5015,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx openshell openshell_gateway openshell_providers openshell_name openshell_keep_ai_trailers", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx openshell openshell_gateway openshell_workspace openshell_workspace_id openshell_providers openshell_name openshell_keep_ai_trailers", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -5034,6 +5054,8 @@ preserve_relaunch_meta() {
   if [ "$OPENSH_ENABLED" = 1 ]; then
     echo "openshell=codex-v1"
     echo "openshell_gateway=$OPENSH_GATEWAY"
+    echo "openshell_workspace=$OPENSH_WORKSPACE"
+    echo "openshell_workspace_id=$OPENSH_WORKSPACE_ID"
     echo "openshell_providers=$OPENSH_PROVIDERS"
     echo "openshell_name=$OPENSH_NAME"
     echo "openshell_keep_ai_trailers=$KEEP_AI_TRAILERS"
