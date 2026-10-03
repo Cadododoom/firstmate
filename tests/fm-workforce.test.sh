@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# Typed Workforce intake through the public CLI in a task-private fake home.
+# No endpoint or lifecycle command is invoked; all requests remain supervisor notes.
+set -euo pipefail
+# shellcheck source=tests/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+TMP_ROOT=$(fm_test_tmproot fm-workforce)
+export FM_HOME="$TMP_ROOT/home"
+bash "$ROOT/bin/fm-lab-home.sh" create "$FM_HOME" >/dev/null
+export WORKFORCE_BIN="$ROOT/bin/fm-workforce.py"
+python3 - <<'PY'
+import json, os, pathlib, subprocess
+home = pathlib.Path(os.environ['FM_HOME'])
+cli = os.environ['WORKFORCE_BIN']
+os.environ['FM_STATE_OVERRIDE'] = str(home/'foreign-state')
+os.environ['TASKS_AXI_FILE'] = str(home/'foreign-backlog.md')
+(home/'data/projects.md').write_text('- demo [direct-PR] - fixture (added 2026-10-03)\n')
+worktree = home/'projects/demo'
+worktree.mkdir()
+def git(*args):
+    return subprocess.check_output(['git', '-C', str(worktree), *args], text=True).strip()
+git('init', '-b', 'fm/batch')
+git('config', 'user.name', 'Test')
+git('config', 'user.email', 'test@example.invalid')
+(worktree/'file').write_text('one')
+git('add', 'file'); git('commit', '-m', 'fixture')
+head = git('rev-parse', 'HEAD')
+metadata = f'project={worktree}\nspawn_gen=gen-1\nkind=ship\nharness=codex\nbackend=herdr\nbranch=fm/batch\nworktree={worktree}\nmode=direct-PR\nyolo=off\n'
+if os.environ.get('FM_WORKFORCE_LAB_SESSION'):
+    metadata += 'herdr_session=' + os.environ['FM_WORKFORCE_LAB_SESSION'] + '\n'
+(home/'state/job.meta').write_text(metadata)
+def call(command, value=None, success=True):
+    result = subprocess.run(['python3', cli, *command], input=json.dumps(value) if value else '',
+                            text=True, capture_output=True)
+    assert (result.returncode == 0) == success, (command, result.stdout, result.stderr)
+    return json.loads(result.stdout)
+def request(rid, action, scope, payload):
+    return dict(schema='fm-workforce-request.v1', request_id=rid, action=action, scope=scope, payload=payload)
+scope = dict(project='demo', job='job', batch='batch-v1', branch='fm/batch', head=head)
+req = request('validate-1', 'validation-request', scope, dict(posture='assistant', delivery_mode='no-mistakes'))
+first = call(['submit'], req)
+assert first['outcome'] == 'created' and first['announced']
+assert call(['submit'], req)['id'] == first['id']
+changed = dict(req, scope=dict(scope, batch='different'))
+assert 'identity' in call(['submit'], changed, False)['error']
+assert len(list((home/'state/inbox').glob('*.note'))) == 1
+assert 'inbox:' in (home/'state/.wake-queue').read_text()
+assert 'Workforce request v1' in (home/'state/inbox'/f"{first['id']}.note").read_text()
+wrong = dict(decision='approved', reason='reviewed', scope=dict(scope, head='0'*40))
+call(['answer', first['id']], wrong, False)
+answer = dict(decision='approved', reason='exact batch reviewed', scope=scope)
+call(['answer', first['id']], answer)
+receipts = call(['receipts', '--all-replies'])
+assert len(receipts['replies']) == 1
+assert 'fm-workforce-answer.v1' in json.dumps(receipts)
+# A new process reads the same request and reply after acknowledgement.
+subprocess.run(['bash', str(pathlib.Path(cli).parent/'fm-inbox.sh'), 'drain', '--ack', first['id']], check=True, capture_output=True, env={k:v for k,v in os.environ.items() if not k.startswith('FM_') or k == 'FM_HOME'})
+assert call(['submit'], req)['acknowledged'], call(['submit'], req)
+second = call(['submit'], dict(req, request_id='validate-2'))
+(worktree/'file').write_text('two'); git('add', 'file'); git('commit', '-m', 'advance')
+assert 'stale head' in call(['answer', second['id']], answer, False)['error']
+call(['submit'], dict(req, request_id='stale'), False)
+# Identity replay remains possible after work advances, never approves new head.
+assert call(['submit'], req)['outcome'] == 'replay'
+new_scope = dict(scope, head=git('rev-parse', 'HEAD'))
+(home/'state/job.meta').write_text(metadata.replace('mode=direct-PR', 'mode=local-only'))
+call(['submit'], dict(req, request_id='local', scope=new_scope), False)
+(home/'state/job.meta').write_text(metadata)
+for verb in ['interrupt', 'exit', 'send-instruction', 'relaunch']:
+    payload = dict(verb=verb)
+    if verb in ['send-instruction', 'relaunch']: payload['text'] = 'checkpoint'
+    call(['submit'], request('window-'+verb, 'window-request', dict(project='demo', job='job', generation='gen-1'), payload))
+for verb in ['open', 'focus', 'teardown']:
+    call(['submit'], request('bad-'+verb, 'window-request', dict(project='demo', job='job', generation='gen-1'), dict(verb=verb)), False)
+(home/'state/job.meta').write_text(metadata.replace('backend=herdr', 'backend=orca'))
+call(['submit'], request('orca', 'window-request', dict(project='demo', job='job', generation='gen-1'), dict(verb='exit')), False)
+(home/'state/job.meta').write_text(metadata+'remote_host=elsewhere\n')
+call(['submit'], request('remote', 'window-request', dict(project='demo', job='job', generation='gen-1'), dict(verb='exit')), False)
+(home/'state/job.meta').write_text(metadata)
+policy = request('policy', 'policy-request', dict(project='demo'), dict(posture='autonomy', delivery_mode='local-only', merge_autonomy=True))
+call(['submit'], policy)
+for level, target in [('global', {}), ('project', {'project':'demo'}), ('job', {'project':'demo','job':'job','generation':'gen-1'})]:
+    call(['submit'], request('defaults-'+level, 'defaults-request', dict(level=level, **target), dict(harness='codex', effort='high')))
+call(['submit'], request('unknown-model', 'defaults-request', dict(level='global'), dict(harness='unsupported', model='assumed')), False)
+call(['submit'], dict(policy, request_id='injection', payload=dict(policy['payload'], executable='/bin/sh')), False)
+call(['submit'], dict(policy, request_id='other-home', home='/tmp'), False)
+call(['submit'], dict(policy, request_id='unregistered', scope=dict(project='absent')), False)
+assert (home/'state/job.meta').read_text() == metadata
+assert '+yolo' not in (home/'data/projects.md').read_text()
+assert not (home/'data/backlog.md').exists()
+call(['submit'], request('stale-generation', 'window-request', dict(project='demo', job='job', generation='gen-0'), dict(verb='exit')), False)
+row_view = call(['status'])
+assert row_view['windows'][0]['generation'] == 'gen-1'
+assert row_view['windows'][0]['verbs']['exit']['request_supported']
+assert not row_view['windows'][0]['verbs']['open']['request_supported']
+assert not row_view['windows'][0]['verbs']['exit']['direct_execution']
+assert row_view['preferences']['jobs'][0]['profile_observation'] == 'same-generation'
+(home/'state/job.meta').unlink()
+(home/'config/backend').write_text('orca\n')
+view = call(['status'])
+assert view['backends']['configured'] == 'orca'
+assert view['backends']['configuration_valid']
+assert view['schema'] == 'fm-workforce-status.v1'
+assert view['projects'][0]['effective'] == 'direct-PR off'
+assert view['preferences']['precedence'] == ['global','project','explicit-job']
+assert view['preferences']['revision']
+assert view['readiness']['schema'] == 'fm-primary-ready.v1'
+assert view['fleet']['tasks'] == []
+job = request('new-worker', 'job-request', dict(project='demo'),
+    dict(kind='ship', text='bounded job', posture='assistant', delivery_mode='local-only',
+         merge_autonomy=False, preferences=dict(harness='codex', effort='high'),
+         preference_revision=view['preferences']['revision']))
+call(['submit'], job)
+call(['submit'], dict(job, request_id='missing-snapshot', payload={k:v for k,v in job['payload'].items() if k != 'preference_revision'}), False)
+assert not (home/'config/crew-harness').exists()
+assert not (home/'foreign-state').exists()
+assert not (home/'foreign-backlog.md').exists()
+# A fixture catalog proves only explicit authoritative identities are accepted.
+catalog = home/'catalog'; catalog.mkdir()
+(catalog/'models_cache.json').write_text(json.dumps({'models':[{'slug':'catalog-model'}]}))
+os.environ['CODEX_HOME'] = str(catalog)
+call(['submit'], request('catalog-match', 'defaults-request', dict(level='global'), dict(harness='codex', model='catalog-model')))
+call(['submit'], request('catalog-mismatch', 'defaults-request', dict(level='global'), dict(harness='codex', model='invented-model')), False)
+print('PASS: durable deduplication, supervisor routing/replies, exact scope/head, stale rejection, independent authority, window refusals and prospective defaults')
+PY
+pass 'Workforce typed public interface'

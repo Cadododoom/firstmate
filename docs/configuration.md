@@ -28,6 +28,8 @@ Start with the directory layout, then use the setting reference for the behavior
 When `FM_HOME` is unset, most scripts use the repo root as the home.
 When it is set, scripts still run from this repo's `bin/`, while `state/`, `data/`, `config/`, and `projects/` come from `$FM_HOME`.
 
+The trusted local Workforce request/receipt interface is owned by [`fm-workforce.py`](../bin/fm-workforce.py), whose header and `--help` define its typed schema and supervisor-only answer publisher.
+
 ### Root and directory overrides
 
 `FM_ROOT_OVERRIDE` overrides the firstmate repo root used by scripts, including the primary checkout watched by the worktree-tangle guard.
