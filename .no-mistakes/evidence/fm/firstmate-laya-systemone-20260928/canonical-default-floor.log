@@ -1,0 +1,9 @@
+dispatch-resolve:
+  status: ambiguous
+  model: laya-rl-agent   latency_ms: 3799   tokens: 139/0
+  rule: rule_1 (Fix a pager bug with a known root cause)   confidence: 0.1294
+  probabilities: rule_1=0.7085 default=0.2915
+  reason: confidence 0.1294 below floor 0.6
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+Canonical package version: 0.3.21
+891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c  /model/hf/hub/models--convaiinnovations--laya/snapshots/55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851/model.safetensors

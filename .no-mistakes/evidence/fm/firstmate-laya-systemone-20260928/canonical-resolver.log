@@ -1,0 +1,14 @@
+97d08baebba99cc7a38aac4f17ba6b7f58a34dd4
+e6f7b7a293aa7b8fd98e82a8d9608db2d030aceeaf64d0f101a360e484bbdc94  bin/fm-dispatch-resolve.sh
+Canonical Laya health:
+{"status":"ok","loaded":["english"],"revisions":{"english":"55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851"},"device":"cpu","device_is_preference":false,"checkpoint_devices":{"english":"cpu"},"cpu_fallbacks":{"english":{"count":0,"last_reason":null}}}
+
+Canonical Laya resolver result:
+dispatch-resolve:
+  status: clear
+  model: laya-rl-agent   latency_ms: 4408   tokens: 139/0
+  rule: rule_1 (Fix a pager bug with a known root cause)   confidence: 0.1294
+  probabilities: rule_1=0.7085 default=0.2915
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'

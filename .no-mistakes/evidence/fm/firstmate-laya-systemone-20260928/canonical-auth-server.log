@@ -1,0 +1,16 @@
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files: 100%|██████████| 5/5 [00:00<00:00, 1890.86it/s]
+/tmp/laya-env/lib/python3.12/site-packages/laya/router.py:456: RuntimeWarning: laya: this checkpoint ships invalid temperatures or values outside [0.5, 5]; using choice:11+=0.10058280825614929 -> 0.5. Treat confidence from the affected entries as uncalibrated.
+  agent = Agent(repo, **kwargs)
+INFO:     Started server process [2313]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:46032 - "POST /v1/systemone HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:46036 - "POST /v1/systemone HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:46050 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46064 - "POST /v1/systemone HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35278 - "POST /v1/systemone HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:35282 - "POST /v1/systemone HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:35292 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35302 - "POST /v1/systemone HTTP/1.1" 200 OK
+Connection to 127.0.0.1 closed by remote host.

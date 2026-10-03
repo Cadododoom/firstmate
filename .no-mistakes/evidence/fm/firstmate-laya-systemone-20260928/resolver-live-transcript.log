@@ -1,0 +1,247 @@
+=== Local unauthenticated Laya request bypasses hostile proxies: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: clear
+  model: controlled-boundary-response   latency_ms: 10   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'
+
+=== Local authenticated Laya request bypasses hostile proxies: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: clear
+  model: controlled-boundary-response   latency_ms: 9   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'
+
+=== Explicit empty provider disables home Laya selection: PASS ===
+exit=0; requests=0
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M41CN1Q4MM41MKFCQ2YRKCME/.validation-laya/home/.env)
+
+=== Explicit empty origin refuses home URL without fallback: PASS ===
+exit=0; requests=0
+dispatch-resolve:
+  status: error
+  reason: LAYA_SYSTEMONE_BASE_URL absent from the environment and /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M41CN1Q4MM41MKFCQ2YRKCME/.validation-laya/home/.env
+dispatch-resolve: error (LAYA_SYSTEMONE_BASE_URL absent from the environment and /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M41CN1Q4MM41MKFCQ2YRKCME/.validation-laya/home/.env)
+
+=== Explicit empty auth clears home bearer key: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: clear
+  model: controlled-boundary-response   latency_ms: 7   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'
+
+=== Home .env selects Laya without TypeSafe key: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: clear
+  model: controlled-boundary-response   latency_ms: 9   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'
+
+=== Reject unsafe origin http://example.com: PASS ===
+exit=0; requests=0
+dispatch-resolve:
+  status: error
+  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)
+dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))
+
+=== Reject unsafe origin https://user:secret@example.com: PASS ===
+exit=0; requests=0
+dispatch-resolve:
+  status: error
+  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)
+dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))
+
+=== Reject unsafe origin https://example.com/path: PASS ===
+exit=0; requests=0
+dispatch-resolve:
+  status: error
+  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)
+dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))
+
+=== Reject unsafe origin https://example.com?x=1: PASS ===
+exit=0; requests=0
+dispatch-resolve:
+  status: error
+  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)
+dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))
+
+=== Reject unsafe origin https://example.com#frag: PASS ===
+exit=0; requests=0
+dispatch-resolve:
+  status: error
+  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)
+dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))
+
+=== Reject bearer header injection: PASS ===
+exit=0; requests=0
+dispatch-resolve:
+  status: error
+  reason: provider API key contains a line break
+dispatch-resolve: error (provider API key contains a line break)
+
+=== Unknown provider is a configuration error: PASS ===
+exit=2; requests=0
+error: DISPATCH_SYSTEMONE_PROVIDER must be typesafe or laya
+
+=== Unavailable provider fails without fallback: PASS ===
+exit=0; requests=0
+dispatch-resolve:
+  status: error
+  reason: http 000 after 9 ms: 
+dispatch-resolve: error (http 000 after 9 ms: )
+
+=== Unauthorized provider fails without fallback: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: error
+  reason: http 401 after 8 ms: {"model": "controlled-boundary-response", "answers": {"rule": {"type": "choice", "choice": "rule_1", "confidence": 0.95, "probabilities": {"rule_1": 0.95, "default": 0.050000000000000044}}}, "usage": 
+dispatch-resolve: error (http 401 after 8 ms: {"model": "controlled-boundary-response", "answers": {"rule": {"type": "choice", "choice": "rule_1", "confidence": 0.95, "probabilities": {"rule_1": 0.95, "default": 0.050000000000000044}}}, "usage": )
+
+=== Malformed model answer fails closed: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: error
+  reason: response is not a rule Choice answer
+dispatch-resolve: error (response is not a rule Choice answer)
+
+=== Invalid probability mass fails closed: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: error
+  reason: response is not a rule Choice answer
+dispatch-resolve: error (response is not a rule Choice answer)
+
+=== Confidence below global floor is ambiguous: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: ambiguous
+  model: controlled-boundary-response   latency_ms: 9   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.599
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  reason: confidence 0.599 below floor 0.6
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+
+=== Confidence at global floor can resolve: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: clear
+  model: controlled-boundary-response   latency_ms: 10   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.6
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'
+
+=== Declared probability below floor is ambiguous: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: ambiguous
+  model: controlled-boundary-response   latency_ms: 9   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.799 default=0.20099999999999996
+  reason: rule_1 probability 0.799 below its floor 0.8; no other option clears its own floor
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+
+=== Declared probability at floor can resolve: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: clear
+  model: controlled-boundary-response   latency_ms: 9   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.1
+  probabilities: rule_1=0.8 default=0.19999999999999996
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'
+
+=== Captain approval rule escalates: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: escalate
+  model: controlled-boundary-response   latency_ms: 9   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  reason: rule requires the captain's explicit approval before dispatch
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+
+=== Exhausted quota vetoes profile outside inference: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: escalate
+  model: controlled-boundary-response   latency_ms: 9   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  reason: no rankable eligible candidate
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=0%  spendPriority=-  runway=through_reset  -> not eligible: 0% remaining at all_models
+
+=== Never-send matching brief prevents network: PASS ===
+exit=0; requests=0
+dispatch-resolve: off (brief text matches /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M41CN1Q4MM41MKFCQ2YRKCME/.validation-laya/home/config/dispatch-never-send line 1; nothing sent)
+
+=== Genuine quota tie escalates outside inference: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: escalate
+  model: controlled-boundary-response   latency_ms: 8   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  reason: genuine spendPriority tie
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.7  runway=through_reset  -> eligible
+
+=== Profile quota floor vetoes candidate outside inference: PASS ===
+exit=0; requests=1
+dispatch-resolve:
+  status: escalate
+  model: controlled-boundary-response   latency_ms: 8   tokens: 30/10
+  rule: rule_1 (Fix pager bugs)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.050000000000000044
+  reason: no rankable eligible candidate
+  note: rule matched
+  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=-  runway=through_reset  -> not eligible: profile floor all_models below 90%
+
+Transport evidence: {
+  "endpoint_requests": 15,
+  "proxy_requests": 0,
+  "first_request": {
+    "path": "/v1/systemone",
+    "auth_present": false,
+    "body": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "lab",
+          "brief": "## Captain's intent\nFix the pager off-by-one.\n\n## Firstmate spec\nUse inclusive bounds.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix pager bugs",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    }
+  },
+  "secrets_profiles_and_quota_absent_from_request": true
+}

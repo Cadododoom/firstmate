@@ -1,0 +1,23 @@
+Using Python 3.12.14 environment at: /tmp/laya-env
+Resolved 1 package in 155ms
+Downloading numpy (15.8MiB)
+ Downloaded numpy
+Prepared 1 package in 757ms
+Uninstalled 1 package in 5ms
+Installed 1 package in 6ms
+ - numpy==2.5.3
+ + numpy==2.2.6
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files:  20%|██        | 1/5 [00:00<00:01,  3.49it/s]Fetching 5 files:  80%|████████  | 4/5 [00:00<00:00,  7.98it/s]Fetching 5 files:  80%|████████  | 4/5 [00:20<00:05,  5.00s/it]Fetching 5 files: 100%|██████████| 5/5 [00:25<00:00,  5.10s/it]Fetching 5 files: 100%|██████████| 5/5 [00:25<00:00,  5.11s/it]
+/tmp/laya-env/lib/python3.12/site-packages/laya/router.py:456: RuntimeWarning: laya: this checkpoint ships invalid temperatures or values outside [0.5, 5]; using choice:11+=0.10058280825614929 -> 0.5. Treat confidence from the affected entries as uncalibrated.
+  agent = Agent(repo, **kwargs)
+INFO:     Started server process [2022]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:34504 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34508 - "POST /v1/systemone HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59160 - "POST /v1/systemone HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2022]

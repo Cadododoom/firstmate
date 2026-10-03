@@ -1,0 +1,17 @@
+=== Environment Laya enables typed validation: PASS ===
+MISSING: tmux (install: brew install tmux  # or the platform's package manager)
+PRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish
+CREW_DISPATCH: invalid config/crew-dispatch.json - approval must be "captain" when present
+
+=== Home Laya enables typed validation: PASS ===
+MISSING: tmux (install: brew install tmux  # or the platform's package manager)
+PRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish
+CREW_DISPATCH: invalid config/crew-dispatch.json - approval must be "captain" when present
+
+=== Empty provider overrides home Laya: PASS ===
+MISSING: tmux (install: brew install tmux  # or the platform's package manager)
+PRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish
+
+=== Empty TypeSafe key overrides home key: PASS ===
+MISSING: tmux (install: brew install tmux  # or the platform's package manager)
+PRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish

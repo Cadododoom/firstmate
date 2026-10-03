@@ -1,0 +1,8 @@
+Source: 97d08baebba99cc7a38aac4f17ba6b7f58a34dd4.
+Controlled public-CLI cases used real resolver/curl, private HTTP endpoints, hostile proxies, and synthetic quota snapshots; these are separate from canonical inference.
+Canonical inference ran inside a visible GTK NixOS/KDE QEMU guest: 1 vCPU, 4096 MiB RAM, private 8 GiB swap disk and 16 GiB cache disk. All VM backing files, sockets, fixtures, and 0700 runtime directory were worktree-local. Source mount was read-only. Initial host: 14 GiB available RAM, 12 CPUs, 129 GiB available disk.
+Laya version 0.3.21, English revision 55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851; model SHA256 891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c.
+Guest-only toolchain: Nix python312/uv, CPU torch, laya[serve]==0.3.21, transformers<5, numpy==2.2.6. GCC and zlib launch library paths repaired missing runtime dependencies; compatible NumPy repaired newest-wheel X86_V2 requirement on the default virtual CPU.
+Checkpoint warns about uncalibrated temperatures. Evidence proves functional compatibility, not dispatch quality or representative latency. Default confidence floor returned ambiguous; declared probability floor returned gpt-6.1-sol medium.
+Targeted resolver regressions ran with bin/fm-test-run.sh. A temporary bootstrap-suite copy ran only test_crew_dispatch_validation and test_laya_dispatch_activation using the same runner and FM_TEST_BASE_PATH=$PATH. Direct bootstrap scenarios used real tools, isolated FM_HOME, detect-only mode, and network skip.
+No source fixes, full suite, lint, format, pipeline-control, PR, push, host configuration, operator credentials, or fleet lifecycle actions. Task-owned VM and temporary fixtures were torn down.

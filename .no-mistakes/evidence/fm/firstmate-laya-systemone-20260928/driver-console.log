@@ -1,0 +1,158 @@
+[
+  {
+    "name": "Local unauthenticated Laya request bypasses hostile proxies",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Local authenticated Laya request bypasses hostile proxies",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Explicit empty provider disables home Laya selection",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Explicit empty origin refuses home URL without fallback",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Explicit empty auth clears home bearer key",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Home .env selects Laya without TypeSafe key",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Reject unsafe origin http://example.com",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe origin https://user:secret@example.com",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe origin https://example.com/path",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe origin https://example.com?x=1",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe origin https://example.com#frag",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Reject bearer header injection",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Unknown provider is a configuration error",
+    "pass": true,
+    "exit": 2,
+    "requests": 0
+  },
+  {
+    "name": "Unavailable provider fails without fallback",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Unauthorized provider fails without fallback",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Malformed model answer fails closed",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Invalid probability mass fails closed",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Confidence below global floor is ambiguous",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Confidence at global floor can resolve",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Declared probability below floor is ambiguous",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Declared probability at floor can resolve",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Captain approval rule escalates",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Exhausted quota vetoes profile outside inference",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Never-send matching brief prevents network",
+    "pass": true,
+    "exit": 0,
+    "requests": 0
+  },
+  {
+    "name": "Genuine quota tie escalates outside inference",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  },
+  {
+    "name": "Profile quota floor vetoes candidate outside inference",
+    "pass": true,
+    "exit": 0,
+    "requests": 1
+  }
+]
