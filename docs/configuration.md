@@ -1109,7 +1109,7 @@ Secondmate homes inherit this file from the primary, so a secondmate's own crewm
 ## Typed dispatch resolution (optional System One provider)
 
 `bin/fm-dispatch-resolve.sh` resolves one concrete crewmate or scout profile from a written brief with a typed System One model, keeping the rule match to one decision request.
-The default provider remains TypeSafe's hosted Jev API and is off unless `TYPESAFE_API_KEY` is non-empty in the calling environment or the home's gitignored `.env` holds a `TYPESAFE_API_KEY=` line.
+The default provider remains TypeSafe's hosted Jev API and is off unless the effective `TYPESAFE_API_KEY` is non-empty, read from the calling environment when set and otherwise from the home's gitignored `.env`.
 Set `DISPATCH_SYSTEMONE_PROVIDER=laya` explicitly in the environment or the home's gitignored `.env` to select the canonical Laya server instead; the environment wins and Laya requires `LAYA_SYSTEMONE_BASE_URL`, with an optional `LAYA_API_KEY` for bearer authentication.
 
 With the default TypeSafe provider and no key, off means one `dispatch-resolve: off` line on stderr, nothing on stdout, exit 0, and no network call, so firstmate dispatches exactly as it does without the tool.
