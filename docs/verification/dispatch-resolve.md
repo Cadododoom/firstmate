@@ -24,7 +24,9 @@ Audited 2026-09-28 against the canonical `NandhaKishorM/laya` repository and rel
 `gh-axi api /repos/NandhaKishorM/laya/contents/pyproject.toml?ref=v0.3.21 --header 'Accept: application/vnd.github.raw+json' --full` confirmed package version `0.3.21`, the optional `serve` extra with FastAPI and Uvicorn, and the `laya-serve` entry point.
 `gh-axi api /repos/NandhaKishorM/laya/contents/laya/serve.py?ref=v0.3.21 --header 'Accept: application/vnd.github.raw+json' --full` confirmed that the canonical HTTP server exposes `POST /v1/systemone` using Jev-compatible answer and usage shapes, with optional `LAYA_API_KEY` bearer authentication.
 The same source ignores unknown Jev model IDs and lets the Router select a checkpoint, and documents a default bind of `0.0.0.0:8000`.
-This source audit supports the direct protocol integration only; no live Laya endpoint, Firstmate dispatch-quality run, or Firstmate latency benchmark has been measured.
+The retained [PR #6473 functional validation](https://github.com/kunchenguid/firstmate/pull/6473) additionally records canonical Laya v0.3.21 inference with and without bearer authentication, home-provider activation, resolver safety boundaries, and bootstrap activation.
+Its resolver outputs include an ambiguous result below the default confidence floor and a clear configured medium-effort profile above a declared probability floor.
+Controlled responses and quota fixtures exercised adverse boundaries; these functional scenarios are not a Firstmate dispatch-quality or latency benchmark, both of which remain unmeasured.
 
 ## Live rule match against real briefs
 
@@ -112,7 +114,8 @@ Offline tests cover the other brief-selection behaviors: a fenced heading inside
 ## Offline behavior
 
 `tests/fm-dispatch-resolve.test.sh` drives the public interface with a fake `curl` that records argv, the request body, the header read from file descriptor 3, and whether the secret reached its environment, plus a fake `quota-axi` that performs the same environment check.
-The shared resolver helpers pin `DISPATCH_SYSTEMONE_PROVIDER=typesafe` and clear the Laya settings, so the offline resolver assertions below establish the TypeSafe path only.
+The shared TypeSafe helpers pin `DISPATCH_SYSTEMONE_PROVIDER=typesafe` and clear the Laya settings; separate provider cases exercise Laya selection from the environment and home `.env`, endpoint and timeout selection, optional bearer authentication, secret isolation, origin rejection, and explicit empty overrides.
+A real-curl loopback fixture proves authenticated and unauthenticated Laya requests bypass inherited proxies for localhost and 127.0.0.1.
 It proves firstmate can invoke the resolve path without a preflight, rules are snapshotted once from the isolated home's canonical `config/crew-dispatch.json`, and dynamic output fields are flattened to one line.
 It proves the TypeSafe provider's absent key (environment and `.env`) prints one stderr line, nothing on stdout, exits 0, and never invokes `curl` or `quota-axi`.
 It proves absent, default-only, and empty-rules files return `no rules to match` without a model or quota request, while a broken rules-file symlink exits 2 as unreadable.
@@ -122,6 +125,7 @@ It proves the TypeSafe request uses its fixed endpoint and Jev model, carries on
 It proves a declared `min_confidence` is checked against the rule's own probability both as the pick and as a runner-up, a picked rule below it falls to the most probable runner-up that clears its floor, is `ambiguous` when none does or two tie, and that a file without declared floors keeps the global 0.6 floor on confidence unchanged.
 It proves the clear, fixed-floor ambiguous with candidate evidence, escalate (approval with candidate evidence, unverifiable rule floor, tie, nothing rankable), known rule-floor fall-through, known and unverifiable profile-floor evidence, explicit-provider and provider-ID enforcement, authoritative Agy and explicit-provider Gemini routing, partial providers, eligible unranked candidates and their clear-result note, concrete quota vetoes and profile-floor shortfalls taking precedence over uncertainty, account-wide quota veto, limiting-bound ranking, schema-6 account-row binding with schema-5 compatibility, missing-curl and quota-axi failures, HTTP 429 and 500, transport failure, malformed usage, zero-mass or malformed probabilities or confidence, malformed or duplicate profile, invalid selector, removed-option rejection, and out-of-range rule ID paths behave as the contract states, with configuration errors exiting 2 before any network call.
 `tests/fm-bootstrap.test.sh` proves bootstrap ignores resolver-only fields with TypeSafe explicitly selected and no key, validates each malformed shape when a TypeSafe key is supplied by the environment or home `.env`, and prevents that key from reaching child processes.
+It also proves environment and home Laya selection activate typed validation without a TypeSafe key, while explicit empty provider and TypeSafe-key overrides disable the corresponding home activation.
 
 ```console
 $ bash tests/fm-dispatch-resolve.test.sh | tail -1

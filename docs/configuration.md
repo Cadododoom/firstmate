@@ -1113,6 +1113,8 @@ The default provider remains TypeSafe's hosted Jev API and is off unless `TYPESA
 Set `DISPATCH_SYSTEMONE_PROVIDER=laya` explicitly in the environment or the home's gitignored `.env` to select the canonical Laya server instead; the environment wins and Laya requires `LAYA_SYSTEMONE_BASE_URL`, with an optional `LAYA_API_KEY` for bearer authentication.
 
 With the default TypeSafe provider and no key, off means one `dispatch-resolve: off` line on stderr, nothing on stdout, exit 0, and no network call, so firstmate dispatches exactly as it does without the tool.
+Explicitly empty environment settings override home `.env` values: an empty provider selects the TypeSafe default, an empty TypeSafe key keeps that provider off, an empty Laya key omits authentication, and an empty Laya URL returns an error.
+Loopback requests bypass HTTP proxies.
 Selecting Laya never falls back to TypeSafe: an absent or invalid Laya endpoint, HTTP failure, or invalid response returns `status: error`.
 This section is the single owner of the tool's operator contract; the script header owns its exact flags and output lines, and "Crew dispatch profiles" above owns the declared rule and profile fields it applies.
 

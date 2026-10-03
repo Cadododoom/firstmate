@@ -1248,6 +1248,32 @@ ROWS
   pass "bootstrap gates resolver fields and additive harnesses on typed-provider activation"
 }
 
+test_laya_dispatch_activation() {
+  local case_dir fakebin out
+  case_dir="$TMP_ROOT/laya-dispatch-activation"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  printf '%s\n' '{"rules":[{"when":"bug","approval":"firstmate","use":{"harness":"codex"}}]}' > "$case_dir/home/config/crew-dispatch.json"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  add_real_jq "$fakebin"
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    DISPATCH_SYSTEMONE_PROVIDER=laya FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_contains "$out" 'approval must be "captain" when present' "environment Laya activates typed validation without TypeSafe key"
+  printf '%s\n' 'DISPATCH_SYSTEMONE_PROVIDER=laya' > "$case_dir/home/.env"
+  out=$(unset DISPATCH_SYSTEMONE_PROVIDER; PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_contains "$out" 'approval must be "captain" when present' "home Laya activates typed validation"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    DISPATCH_SYSTEMONE_PROVIDER='' FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_equals '' "$out" "empty environment provider overrides home Laya activation"
+  printf '%s\n' 'TYPESAFE_API_KEY=home-key' > "$case_dir/home/.env"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    TYPESAFE_API_KEY='' FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_equals '' "$out" "empty environment TypeSafe key overrides home activation"
+  pass "bootstrap Laya activation and empty overrides agree with resolver"
+}
+
 test_bootstrap_reporting
 test_no_mistakes_min_version
 test_gh_axi_min_version
@@ -1276,3 +1302,5 @@ test_network_phases_record_per_step_elapsed_times
 test_tasks_axi_verdict_handoff_is_consumed_once
 test_crew_dispatch_active_rules_are_verbose_bootstrap_info
 test_crew_dispatch_validation
+
+test_laya_dispatch_activation

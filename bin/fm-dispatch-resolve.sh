@@ -75,9 +75,13 @@
 #   inspectable answer plus every candidate's evidence, in code.
 set -u
 
+TYPESAFE_API_KEY_SET=${TYPESAFE_API_KEY+x}
 TYPESAFE_API_KEY_PRIVATE=${TYPESAFE_API_KEY:-}
+LAYA_API_KEY_SET=${LAYA_API_KEY+x}
 LAYA_API_KEY_PRIVATE=${LAYA_API_KEY:-}
+DISPATCH_SYSTEMONE_PROVIDER_SET=${DISPATCH_SYSTEMONE_PROVIDER+x}
 DISPATCH_SYSTEMONE_PROVIDER_PRIVATE=${DISPATCH_SYSTEMONE_PROVIDER:-}
+LAYA_SYSTEMONE_BASE_URL_SET=${LAYA_SYSTEMONE_BASE_URL+x}
 LAYA_SYSTEMONE_BASE_URL_PRIVATE=${LAYA_SYSTEMONE_BASE_URL:-}
 export -n TYPESAFE_API_KEY_PRIVATE 2>/dev/null || true
 export -n LAYA_API_KEY_PRIVATE 2>/dev/null || true
@@ -158,18 +162,18 @@ while [ $# -gt 0 ]; do
 done
 
 # ---- provider selection and opt-in gate ----------------------------------------
-if [ -z "$DISPATCH_SYSTEMONE_PROVIDER_PRIVATE" ]; then
+if [ -z "$DISPATCH_SYSTEMONE_PROVIDER_SET" ]; then
   DISPATCH_SYSTEMONE_PROVIDER_PRIVATE=$(fmx_env_get DISPATCH_SYSTEMONE_PROVIDER "$FM_HOME/.env")
 fi
 [ -n "$DISPATCH_SYSTEMONE_PROVIDER_PRIVATE" ] || DISPATCH_SYSTEMONE_PROVIDER_PRIVATE=typesafe
 
-if [ -z "$TYPESAFE_API_KEY_PRIVATE" ]; then
+if [ -z "$TYPESAFE_API_KEY_SET" ]; then
   TYPESAFE_API_KEY_PRIVATE=$(fmx_env_get TYPESAFE_API_KEY "$FM_HOME/.env")
 fi
-if [ -z "$LAYA_API_KEY_PRIVATE" ]; then
+if [ -z "$LAYA_API_KEY_SET" ]; then
   LAYA_API_KEY_PRIVATE=$(fmx_env_get LAYA_API_KEY "$FM_HOME/.env")
 fi
-if [ -z "$LAYA_SYSTEMONE_BASE_URL_PRIVATE" ]; then
+if [ -z "$LAYA_SYSTEMONE_BASE_URL_SET" ]; then
   LAYA_SYSTEMONE_BASE_URL_PRIVATE=$(fmx_env_get LAYA_SYSTEMONE_BASE_URL "$FM_HOME/.env")
 fi
 
@@ -349,12 +353,12 @@ never_send_check() {
 
 post_systemone() {
   if [ -n "$SYSTEMONE_API_KEY_PRIVATE" ]; then
-    curl -sS --max-time "$SYSTEMONE_TIMEOUT" -o "$RESP_FILE" -w '%{http_code}' \
+    curl -sS --noproxy "localhost,127.0.0.1,::1,${no_proxy-${NO_PROXY-}}" --max-time "$SYSTEMONE_TIMEOUT" -o "$RESP_FILE" -w '%{http_code}' \
       -X POST "$SYSTEMONE_URL" -H 'Content-Type: application/json' \
       -H @/dev/fd/3 3< <(printf 'Authorization: Bearer %s\n' "$SYSTEMONE_API_KEY_PRIVATE") \
       --data-binary @- 2>/dev/null
   else
-    curl -sS --max-time "$SYSTEMONE_TIMEOUT" -o "$RESP_FILE" -w '%{http_code}' \
+    curl -sS --noproxy "localhost,127.0.0.1,::1,${no_proxy-${NO_PROXY-}}" --max-time "$SYSTEMONE_TIMEOUT" -o "$RESP_FILE" -w '%{http_code}' \
       -X POST "$SYSTEMONE_URL" -H 'Content-Type: application/json' \
       --data-binary @- 2>/dev/null
   fi
