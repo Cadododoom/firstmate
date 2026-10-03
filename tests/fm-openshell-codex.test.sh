@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import shutil
@@ -149,7 +150,7 @@ with tempfile.TemporaryDirectory(dir=root / "tests", prefix="openshell-fixes-") 
     base = Path(tmp)
     fake = base / "openshell"
     fake.write_text("""#!/usr/bin/env python3
-import json, os, pathlib, shutil, subprocess, sys, time
+import json, os, pathlib, re, shutil, subprocess, sys, time
 args = sys.argv[1:]
 if 'workspace' in args and 'get' in args:
     name = args[args.index('--workspace') + 1]
@@ -167,11 +168,14 @@ elif 'sandbox' in args and 'download' in args:
         (remote / relative).resolve().relative_to(remote.resolve())
     except ValueError:
         sys.exit('download source is outside sandbox workspace')
-    if source == '/sandbox/.git':
-        shutil.copytree(remote / '.git', pathlib.Path(args[-1]), symlinks=True)
-        transferred = ['.git/' + str(p.relative_to(remote / '.git')) for p in (remote / '.git').rglob('*') if p.is_file()]
+    source_path = remote / relative
+    if source_path.is_dir():
+        shutil.copytree(source_path, pathlib.Path(args[-1]), symlinks=True)
+        transferred = [str(relative / p.relative_to(source_path)) for p in source_path.rglob('*') if p.is_file()]
     else:
         source_file = remote / relative
+        if os.environ.get('FAIL_ARCHIVE_DOWNLOAD') == '1':
+            sys.exit('injected archive download failure')
         shutil.copy2(source_file, pathlib.Path(args[-1]) / source_file.name)
         import tarfile
         with tarfile.open(source_file) as archive:
@@ -188,6 +192,9 @@ elif '--' in args and args[args.index('--') + 1] == 'python3':
     elif len(command) == 4:
         remote = pathlib.Path(os.environ['DOWNLOAD_SOURCE'])
         command[3] = str(remote / pathlib.PurePosixPath(command[3]).relative_to('/sandbox'))
+        directory = pathlib.Path(command[3])
+        if os.environ.get('FAIL_SNAPSHOT_CLEANUP') == '1' and any(re.fullmatch(r'[.]fm-openshell-snapshot-[0-9a-f]{32}[.]tar', p.name) and p.is_file() for p in directory.iterdir()):
+            sys.exit('injected cleanup transport failure')
         subprocess.run(command, check=True)
 elif '--' in args and args[args.index('--') + 1] == 'git':
     command = args[args.index('--') + 1:]
@@ -605,6 +612,80 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
         runner.run(["git", "-C", str(ctx["stage"]), "-c", "core.hooksPath=" + str(private_hooks),
                     "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "--allow-empty", "-qm", "exercise hook"], env=runner.cli_env())
         assert (ctx["stage"] / "hook-ran").read_text() == "hook executed"
+        for failure in ["packing", "download", "cleanup"]:
+            ctx, journal = make_repo("snapshot-retry-" + failure)
+            remote = ctx["home"] / "remote"
+            shutil.copytree(ctx["stage"], remote)
+            (remote / "untracked").write_text("excluded project data")
+            (remote / ".gitignore").write_text("ignored\n")
+            (remote / "ignored").write_text("excluded ignored data")
+            channel = remote / ".git" / "fm-openshell" / "channel" / "outbox"
+            channel.mkdir(parents=True)
+            (channel / "keep").write_text("task channel")
+            unrelated = remote / ".git" / ".fm-openshell-snapshot-unrelated.tar"
+            unrelated.write_text("unrelated Git data")
+            preserved_dir = remote / ".git" / (".fm-openshell-snapshot-" + "c" * 32 + ".tar")
+            preserved_dir.mkdir()
+            (preserved_dir / "keep").write_text("unrelated directory")
+            if failure != "cleanup":
+                abandoned = remote / ".git" / (".fm-openshell-snapshot-" + "a" * 32 + ".tar")
+                abandoned.write_bytes(b"abandoned snapshot")
+            if failure == "packing":
+                (remote / "payload").unlink()
+                os.mkfifo(remote / "payload")
+            log = ctx["home"] / "transport.jsonl"
+            flags = {"FAIL_ARCHIVE_DOWNLOAD": "1" if failure != "packing" else "0",
+                     "FAIL_SNAPSHOT_CLEANUP": "1" if failure == "cleanup" else "0"}
+            with patch.dict(os.environ, DOWNLOAD_SOURCE=str(remote), DOWNLOAD_LOG=str(log), **flags):
+                refuses(lambda: runner.download_workspace(ctx, journal))
+            snapshots = [p for p in (remote / ".git").iterdir()
+                         if re.fullmatch(r"[.]fm-openshell-snapshot-[0-9a-f]{32}[.]tar", p.name) and p.is_file()]
+            assert bool(snapshots) == (failure == "cleanup")
+            assert (ctx["stage"] / "payload").read_text() == "original payload"
+            assert (remote / ".git" / "HEAD").is_file()
+            assert unrelated.read_text() == "unrelated Git data"
+            assert (preserved_dir / "keep").read_text() == "unrelated directory"
+            assert (channel / "keep").read_text() == "task channel"
+            if failure == "packing":
+                (remote / "payload").unlink()
+                (remote / "payload").write_text("incoming payload")
+            with patch.dict(os.environ, DOWNLOAD_SOURCE=str(remote), DOWNLOAD_LOG=str(log)):
+                runner.download_workspace(ctx, journal)
+                link = remote / ".git" / (".fm-openshell-snapshot-" + "d" * 32 + ".tar")
+                link.symlink_to("HEAD")
+                runner.retire_remote_snapshots(ctx)
+                assert link.is_symlink()
+                link.unlink()
+            assert journal["phase"] == "snapshot-downloaded"
+            transported = [path for line in log.read_text().splitlines() for path in json.loads(line)]
+            assert not any(re.fullmatch(r"[.]git/[.]fm-openshell-snapshot-[0-9a-f]{32}[.]tar", path) for path in transported)
+            assert not {"untracked", "ignored", ".gitignore"} & set(transported)
+            assert (ctx["stage"] / ".git" / "fm-openshell" / "channel" / "outbox" / "keep").read_text() == "task channel"
+            assert (ctx["stage"] / ".git" / ".fm-openshell-snapshot-unrelated.tar").read_text() == "unrelated Git data"
+        ctx, journal = make_repo("outbox-layout")
+        ctx["bridge_dir"].mkdir()
+        remote = ctx["stage"]
+        channel = remote / ".git" / "fm-openshell" / "channel"
+        outbox = channel / "outbox"
+        outbox.mkdir(parents=True)
+        request_id = "a" * 32
+        request = {"op": "inbox.ack", "name": "0001.msg"}
+        (outbox / (request_id + ".json")).write_text(json.dumps(request))
+        (outbox / "keep").write_text("task channel")
+        (outbox / ("b" * 32 + ".tmp")).write_text("pending request")
+        (channel / "inbox").mkdir()
+        (channel / "inbox" / "0001.msg").write_text("unrelated inbox data")
+        log = ctx["home"] / "outbox-transport.jsonl"
+        with patch.dict(os.environ, DOWNLOAD_SOURCE=str(remote), DOWNLOAD_LOG=str(log)):
+            assert runner.download_outbox(ctx) == {request_id: request}
+            assert not list(ctx["bridge_dir"].iterdir())
+            (outbox / "outbox").mkdir()
+            (outbox / "outbox" / (request_id + ".json")).write_text(json.dumps(request))
+            refuses(lambda: runner.download_outbox(ctx))
+            assert not list(ctx["bridge_dir"].iterdir())
+        transported = [path for line in log.read_text().splitlines() for path in json.loads(line)]
+        assert all(path.startswith(".git/fm-openshell/channel/outbox/") for path in transported)
+        assert (channel / "inbox" / "0001.msg").read_text() == "unrelated inbox data"
         ctx, journal = make_repo("tracked-transfer")
         wt = ctx["worktree"]
         (wt / ".gitignore").write_text("ignored\n")

@@ -753,6 +753,22 @@ def extract_workspace(ctx, archive_path):
     archive_path.unlink()
 
 
+def retire_remote_snapshots(ctx):
+    cleanup = (
+        "import os,re,sys\n"
+        "root=sys.argv[1]\n"
+        "if os.path.islink(root) or not os.path.isdir(root):\n"
+        " raise SystemExit('snapshot cleanup requires the private Git directory')\n"
+        "with os.scandir(root) as entries:\n"
+        " for entry in entries:\n"
+        "  if re.fullmatch(r'[.]fm-openshell-snapshot-[0-9a-f]{32}[.]tar', entry.name) and entry.is_file(follow_symlinks=False):\n"
+        "   os.unlink(entry.path)\n"
+    )
+    openshell_run(ctx, "sandbox", "exec", "--name", ctx["sandbox"],
+                  "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--no-tty",
+                  "--", "python3", "-c", cleanup, WORKSPACE_IN_SANDBOX + "/.git")
+
+
 def download_workspace(ctx, journal):
     download_root = ctx["stage_root"] / "download"
     seed = ctx["stage_root"] / "workspace-seed"
@@ -769,6 +785,7 @@ def download_workspace(ctx, journal):
     write_journal(ctx, journal)
     download_root.mkdir(mode=0o700)
     try:
+        retire_remote_snapshots(ctx)
         if journal.get("validation_requested"):
             result = openshell_run(ctx, "sandbox", "exec", "--name", ctx["sandbox"],
                                    "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--no-tty",
@@ -801,14 +818,14 @@ def download_workspace(ctx, journal):
             "    raise SystemExit('unsupported tracked snapshot entry')\n"
             "   archive.add(path, arcname=rel, recursive=False)\n"
         )
-        openshell_run(ctx, "sandbox", "exec", "--name", ctx["sandbox"],
-                      "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--no-tty",
-                      "--", "python3", "-c", packing, WORKSPACE_IN_SANDBOX, remote_archive,
-                      input_bytes=json.dumps(paths, ensure_ascii=True).encode("ascii"))
-        openshell_run(ctx, "sandbox", "download", ctx["sandbox"], remote_archive, str(download_root))
-        openshell_run(ctx, "sandbox", "exec", "--name", ctx["sandbox"],
-                      "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--no-tty",
-                      "--", "python3", "-c", "import os,sys;os.unlink(sys.argv[1])", remote_archive)
+        try:
+            openshell_run(ctx, "sandbox", "exec", "--name", ctx["sandbox"],
+                          "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--no-tty",
+                          "--", "python3", "-c", packing, WORKSPACE_IN_SANDBOX, remote_archive,
+                          input_bytes=json.dumps(paths, ensure_ascii=True).encode("ascii"))
+            openshell_run(ctx, "sandbox", "download", ctx["sandbox"], remote_archive, str(download_root))
+        finally:
+            retire_remote_snapshots(ctx)
         archive_path = download_root / Path(remote_archive).name
         if archive_path.is_symlink() or not archive_path.is_file():
             fail("OpenShell snapshot archive is missing or unsafe")
@@ -1132,11 +1149,10 @@ def download_outbox(ctx):
             "sandbox", "download", ctx["sandbox"],
             CHANNEL_IN_SANDBOX + "/outbox", str(target),
         )
-        candidate = target / "outbox" if (target / "outbox").is_dir() else target
-        if candidate.is_symlink() or not candidate.is_dir():
+        if target.is_symlink() or not target.is_dir():
             fail("OpenShell returned an invalid task channel directory")
         requests = {}
-        for item in candidate.iterdir():
+        for item in target.iterdir():
             if item.name == "keep":
                 continue
             if re.fullmatch(r"[0-9a-f]{32}\.tmp", item.name):
