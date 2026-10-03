@@ -136,6 +136,38 @@ assert row_view['windows'][0]['verbs']['exit']['request_supported']
 assert not row_view['windows'][0]['verbs']['open']['request_supported']
 assert not row_view['windows'][0]['verbs']['exit']['direct_execution']
 assert row_view['preferences']['jobs'][0]['profile_observation'] == 'same-generation'
+for verb, capability in row_view['windows'][0]['verbs'].items():
+    payload = dict(verb=verb)
+    if verb in {'send-instruction', 'relaunch'}:
+        payload['text'] = 'bounded instruction'
+    call(['submit'], request('advertised-'+verb, 'window-request',
+        dict(project=row_view['windows'][0]['project'], job='job', generation='gen-1'), payload),
+        capability['request_supported'])
+invalid_rows = [
+    metadata.replace('project='+str(worktree), 'project='+str(home/'secondmates/demo'))
+            .replace('kind=ship', 'kind=secondmate').replace('harness=codex', 'harness=pi')
+            .replace('mode=direct-PR', 'mode=secondmate'),
+    metadata.replace('project='+str(worktree), 'project='+str(home/'secondmates/unregistered'))
+            .replace('kind=ship', 'kind=secondmate').replace('harness=codex', 'harness=pi')
+            .replace('mode=direct-PR', 'mode=secondmate'),
+    metadata.replace('project='+str(worktree), 'project='+str(home/'outside/demo')),
+    metadata.replace('spawn_gen=gen-1\n', ''),
+    metadata.replace('spawn_gen=gen-1', 'spawn_gen=invalid/generation'),
+    metadata+'remote_host=elsewhere\n',
+]
+for i, invalid_metadata in enumerate(invalid_rows):
+    (home/'state/job.meta').write_text(invalid_metadata)
+    window = call(['status'])['windows'][0]
+    assert all(not capability['request_supported'] and capability['reason']
+               for capability in window['verbs'].values()), window
+    for verb in ['send-instruction', 'interrupt', 'exit', 'relaunch']:
+        payload = dict(verb=verb)
+        if verb in {'send-instruction', 'relaunch'}:
+            payload['text'] = 'bounded instruction'
+        call(['submit'], request('unaddressable-'+str(i)+'-'+verb, 'window-request',
+            dict(project=window['project'], job=window['job'], generation=window['generation']), payload), False)
+(home/'state/job.meta').write_text(metadata)
+assert call(['status'])['windows'][0]['verbs']['exit']['request_supported']
 (home/'state/job.meta').unlink()
 (home/'config/backend').write_text('orca\n')
 view = call(['status'])

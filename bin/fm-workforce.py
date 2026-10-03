@@ -538,13 +538,21 @@ def status(home, env):
                          'provenance': 'fm-project-mode.sh'})
     windows = []
     for task in fleet['tasks']:
-        values = dict(task, remote_host=(task.get('remote') or {}).get('host', ''))
+        scope = {'job': task['id'], 'project': Path(task['project']).name,
+                 'generation': task.get('spawn_gen')}
         verbs = {}
         for verb in sorted(VERBS):
-            supported, reason = window_capability(env, values, verb)
+            payload = {'verb': verb}
+            if verb in {'send-instruction', 'relaunch'}:
+                payload['text'] = 'Workforce capability observation'
+            try:
+                validate(home, env, {'schema': SCHEMA, 'request_id': 'status-capability',
+                                    'action': 'window-request', 'scope': scope, 'payload': payload})
+                supported, reason = True, 'request scope and window capability verified; guarded owner retains execution checks'
+            except ValueError as error:
+                supported, reason = False, str(error)
             verbs[verb] = {'request_supported': supported, 'direct_execution': False, 'reason': reason}
-        windows.append({'job': task['id'], 'project': Path(task['project']).name,
-                        'generation': task.get('spawn_gen'), 'backend': task['backend'], 'verbs': verbs})
+        windows.append(dict(scope, backend=task['backend'], verbs=verbs))
     emit({'schema': 'fm-workforce-status.v1', 'fleet': fleet,
           'readiness': json.loads(output(env, 'fm-inbox.sh', 'ready')),
           'projects': policies, 'windows': windows,
