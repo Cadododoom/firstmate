@@ -124,7 +124,7 @@ with tempfile.TemporaryDirectory(dir=root / "tests", prefix="openshell-fixes-") 
     base = Path(tmp)
     fake = base / "openshell"
     fake.write_text("""#!/usr/bin/env python3
-import os, pathlib, shutil, sys, time
+import json, os, pathlib, shutil, subprocess, sys, time
 args = sys.argv[1:]
 if 'workspace' in args and 'get' in args:
     name = args[args.index('--workspace') + 1]
@@ -133,7 +133,31 @@ elif 'sandbox' in args and 'get' in args:
     print('sandbox not found', file=sys.stderr)
     sys.exit(1)
 elif 'sandbox' in args and 'download' in args:
-    shutil.copytree(os.environ['DOWNLOAD_SOURCE'], pathlib.Path(args[-1]) / 'sandbox', symlinks=True)
+    remote = pathlib.Path(os.environ['DOWNLOAD_SOURCE'])
+    source = args[-2]
+    if source == '/sandbox/.git':
+        shutil.copytree(remote / '.git', pathlib.Path(args[-1]) / '.git', symlinks=True)
+        transferred = ['.git/' + str(p.relative_to(remote / '.git')) for p in (remote / '.git').rglob('*') if p.is_file()]
+    else:
+        source_file = remote.parent / pathlib.Path(source).name
+        shutil.copy2(source_file, pathlib.Path(args[-1]) / source_file.name)
+        import tarfile
+        with tarfile.open(source_file) as archive:
+            transferred = archive.getnames()
+    with open(os.environ['DOWNLOAD_LOG'], 'a') as output:
+        output.write(json.dumps(transferred) + '\\n')
+elif '--' in args and args[args.index('--') + 1] == 'python3':
+    command = args[args.index('--') + 1:]
+    if len(command) == 5:
+        remote = pathlib.Path(os.environ['DOWNLOAD_SOURCE'])
+        command[3] = str(remote)
+        command[4] = str(remote.parent / pathlib.Path(command[4]).name)
+        subprocess.run(command, check=True)
+elif '--' in args and args[args.index('--') + 1] == 'git':
+    command = args[args.index('--') + 1:]
+    remote = os.environ['DOWNLOAD_SOURCE']
+    command = [arg.replace('/sandbox', remote) if arg.startswith(('--git-dir=', '--work-tree=')) else arg for arg in command]
+    subprocess.run(command, check=True)
 elif '--' in args and args[args.index('--') + 1] == 'codex':
     time.sleep(20)
 """)
@@ -407,6 +431,83 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
         assert os.readlink(wt / "b") == "payload"
         assert (wt / ".a.fm-openshell-tmp").read_text() == "tracked sibling"
         assert (wt / ".b.fm-openshell-tmp" / "secret").read_text() == "unrelated sibling"
+        for ignored in [False, True]:
+            ctx, journal = make_repo("matching-collision-" + str(ignored))
+            wt, stage = ctx["worktree"], ctx["stage"]
+            if ignored:
+                runner.git(wt, "config", "core.excludesFile", str(ctx["home"] / "excludes"))
+                (ctx["home"] / "excludes").write_text("new-file\n")
+            (wt / "new-file").write_text("matching data")
+            (stage / "new-file").write_text("matching data")
+            runner.git(stage, "add", "new-file")
+            refuses(lambda: runner.sync_workspace(ctx, journal))
+            assert (wt / "new-file").read_text() == "matching data"
+            assert journal["phase"] == "snapshot-downloaded"
+            assert not (ctx["stage_root"] / "host-backup").exists()
+            assert runner.git(wt, "write-tree") == journal["base_index_tree"]
+        ctx, journal = make_repo("late-matching-collision")
+        wt, stage = ctx["worktree"], ctx["stage"]
+        (stage / "new-file").write_text("matching data")
+        runner.git(stage, "add", "new-file")
+        original_apply = runner.apply_files
+        def late_collision(source, dest, *args):
+            if source == stage:
+                (wt / "new-file").write_text("matching data")
+            return original_apply(source, dest, *args)
+        with patch.object(runner, "apply_files", late_collision):
+            refuses(lambda: runner.sync_workspace(ctx, journal))
+        assert (wt / "new-file").read_text() == "matching data"
+        assert journal["phase"] == "snapshot-downloaded"
+        assert runner.git(wt, "write-tree") == journal["base_index_tree"]
+        ctx, journal = make_repo("interrupted-unclaimed-collision")
+        wt, stage = ctx["worktree"], ctx["stage"]
+        (stage / "new-file").write_text("matching data")
+        runner.git(stage, "add", "new-file")
+        runner.backup_host(ctx, journal)
+        journal.update(phase="syncing", sync_head=journal["base_head"], sync_paths=[],
+                       sync_files=runner.snapshot(stage, runner.git_paths(stage)))
+        runner.write_journal(ctx, journal)
+        (wt / "new-file").write_text("matching data")
+        with patch.object(runner, "load_context", return_value=ctx), patch.object(runner, "endpoint_agent_free"):
+            refuses(lambda: runner.recover_task("task"))
+        assert (wt / "new-file").read_text() == "matching data"
+        assert runner.read_journal(ctx)["phase"] == "snapshot-downloaded"
+        assert runner.git(wt, "write-tree") == journal["base_index_tree"]
+        ctx, journal = make_repo("tracked-hooks")
+        wt = ctx["worktree"]
+        hooks = wt / ".hooks"
+        hooks.mkdir()
+        (hooks / "pre-commit").write_text("#!/bin/sh\nprintf 'hook executed' > hook-ran\n")
+        (hooks / "pre-commit").chmod(0o755)
+        (wt / ".gitignore").write_text(".hooks/private-config\n")
+        runner.git(wt, "add", ".hooks/pre-commit", ".gitignore")
+        runner.git(wt, "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "tracked hook")
+        runner.git(wt, "config", "core.hooksPath", ".hooks")
+        (hooks / "private-config").write_text("ignored secret")
+        (hooks / "untracked-config").write_text("untracked secret")
+        shutil.rmtree(ctx["stage_root"])
+        ctx["journal"].unlink()
+        ctx["channel"] = ctx["bridge_dir"] / "inbox"
+        ctx["responses"] = ctx["bridge_dir"] / "responses"
+        (ctx["state"] / "task.inbox").mkdir()
+        journal = runner.prepare_workspace(ctx)
+        private_hooks = ctx["stage"] / ".git" / "fm-openshell" / "project-hooks"
+        assert (private_hooks / "pre-commit").exists()
+        assert not (private_hooks / "private-config").exists()
+        assert not (private_hooks / "untracked-config").exists()
+        (ctx["stage"] / "injected-untracked").write_text("must not upload")
+        archive = runner.workspace_archive(ctx)
+        with tarfile.open(archive) as uploaded:
+            names = {member.name.removeprefix("./") for member in uploaded.getmembers()}
+            assert ".hooks/pre-commit" in names
+            assert ".git/fm-openshell/project-hooks/pre-commit" in names
+            assert not {".hooks/private-config", ".hooks/untracked-config", "injected-untracked"} & names
+            assert ".git/fm-openshell/project-hooks/private-config" not in names
+            assert ".git/fm-openshell/project-hooks/untracked-config" not in names
+        archive.unlink()
+        runner.run(["git", "-C", str(ctx["stage"]), "-c", "core.hooksPath=" + str(private_hooks),
+                    "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "--allow-empty", "-qm", "exercise hook"], env=runner.cli_env())
+        assert (ctx["stage"] / "hook-ran").read_text() == "hook executed"
         ctx, journal = make_repo("tracked-transfer")
         wt = ctx["worktree"]
         (wt / ".gitignore").write_text("ignored\n")
@@ -435,13 +536,24 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
         (remote / "sandbox-untracked").write_text("excluded sandbox output")
         (remote / "ignored").write_text("excluded ignored output")
         (remote / "staged-new").write_text("changed tracked output")
-        with patch.dict(os.environ, DOWNLOAD_SOURCE=str(remote)):
+        (remote / "sandbox-link").symlink_to("staged-new")
+        runner.git(remote, "add", "sandbox-link")
+        download_log = ctx["home"] / "download-log.jsonl"
+        with patch.dict(os.environ, DOWNLOAD_SOURCE=str(remote), DOWNLOAD_LOG=str(download_log)):
             runner.download_workspace(ctx, journal)
+        transported = {path for line in download_log.read_text().splitlines() for path in json.loads(line)}
+        assert not {"sandbox-untracked", "ignored"} & transported
+        assert not (ctx["stage"] / "sandbox-untracked").exists()
+        assert not (ctx["stage"] / "ignored").exists()
+        dirty_journal = {**journal, "validation_requested": True}
+        with patch.dict(os.environ, DOWNLOAD_SOURCE=str(remote), DOWNLOAD_LOG=str(download_log)):
+            refuses(lambda: runner.download_workspace(ctx, dirty_journal))
         _, _, paths, states = runner.verify_stage(ctx, journal)
-        assert set(paths) == {".gitignore", "index", "payload", "staged-new"}
+        assert set(paths) == {".gitignore", "index", "payload", "staged-new", "sandbox-link"}
         assert "sandbox-untracked" not in states and "ignored" not in states
         runner.sync_workspace(ctx, journal)
         assert (wt / "staged-new").read_text() == "changed tracked output"
+        assert os.readlink(wt / "sandbox-link") == "staged-new"
         assert not (wt / "sandbox-untracked").exists()
         assert (wt / "untracked").read_text() == "host-only untracked"
         assert (wt / "ignored").read_text() == "host-only ignored"

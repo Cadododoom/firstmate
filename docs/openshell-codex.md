@@ -27,6 +27,7 @@ The sandbox policy sets Landlock to `hard_requirement`, which requires Landlock 
 
 The runner creates a private, no-hardlinks clone of the assigned task branch under `/tmp/fm-<task>/openshell-codex/workspace`.
 It copies tracked task files, including staged additions and changes.
+Configured project hooks are copied from tracked paths only, including their supporting files.
 Ignored files and submodules are unsupported.
 It sends the clone through OpenShell's supported file-transfer API into `/sandbox`, the only project and task data path.
 System paths are read-only; `/tmp` is private scratch space and `/dev/null` is writable as a device.
@@ -47,7 +48,9 @@ The relay polls the task channel through OpenShell file transfers while Codex is
 The sandbox cannot pass host paths or task ids to these operations.
 Workspace changes are downloaded and synchronized only to the task's recorded branch using a fast-forward and compare-and-swap check.
 Staged changes and unstaged changes or deletions of tracked files are preserved.
-Untracked files are excluded from preparation and synchronization; unrelated host files remain untouched.
+Project-file upload archives and download snapshots enumerate tracked paths before transfer; untracked and ignored project files are excluded.
+Git metadata and the fixed task channels retain their existing transfer scope.
+Incoming tracked paths that collide with unrelated host files refuse synchronization before mutation, and rollback restores only transaction-claimed paths.
 File and symlink leaves can become directories, or directories can become leaves, by retiring obsolete leaves before copying replacements; unrelated directory contents refuse replacement and remain intact.
 
 ## Host validation handoff

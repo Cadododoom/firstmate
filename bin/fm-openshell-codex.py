@@ -410,13 +410,15 @@ def copy_path(source_root, dest_root, rel, baseline=None):
             pass
 
 
-def apply_files(source_root, dest_root, paths, states, baseline, expected):
+def apply_files(source_root, dest_root, paths, states, baseline, expected, before_apply=None):
     deletions = {path for path in paths if states.get(path, {}).get("kind", "missing") == "missing"}
     ordered = sorted(deletions, key=lambda path: (-path.count("/"), os.fsencode(path)))
     ordered.extend(sorted(set(paths) - deletions, key=os.fsencode))
     for rel in ordered:
         if not same_content(state_for(dest_root, rel), expected.get(rel, {"kind": "missing"})):
             fail("task worktree changed during OpenShell file transition: " + rel)
+        if before_apply:
+            before_apply(rel)
         if rel in deletions:
             remove_leaf(dest_root, rel)
         else:
@@ -481,21 +483,21 @@ def copy_project_hooks(ctx):
     if not resolved.is_dir() or resolved.is_symlink():
         return False
     destination = ctx["stage"] / ".git" / "fm-openshell" / "project-hooks"
-    for root, dirs, files in os.walk(str(resolved), followlinks=False):
-        relative_root = os.path.relpath(root, str(resolved))
-        target_root = destination if relative_root == "." else destination / relative_root
-        target_root.mkdir(parents=True, exist_ok=True)
-        for name in dirs[:]:
-            source = Path(root) / name
-            if source.is_symlink():
-                fail("project Git hook directory contains a symlink")
-            (target_root / name).mkdir(exist_ok=True)
-        for name in files:
-            source = Path(root) / name
-            if source.is_symlink() or not source.is_file():
-                fail("project Git hooks contain an unsupported file")
-            shutil.copy2(str(source), str(target_root / name))
-    return True
+    prefix = "" if resolved == ctx["worktree"] else resolved.relative_to(ctx["worktree"]).as_posix() + "/"
+    copied = False
+    for rel in git_paths(ctx["worktree"]):
+        if not rel.startswith(prefix):
+            continue
+        kind = state_for(ctx["worktree"], rel)["kind"]
+        if kind == "missing":
+            continue
+        if kind != "file":
+            fail("project Git hooks contain an unsupported file")
+        hook_rel = rel[len(prefix):]
+        destination.mkdir(parents=True, exist_ok=True)
+        copy_path(resolved, destination, hook_rel)
+        copied = True
+    return copied
 
 
 def prepare_workspace(ctx):
@@ -688,19 +690,11 @@ def workspace_archive(ctx):
     archive_path = ctx["stage_root"] / (".fm-openshell-workspace-" + secrets.token_hex(16) + ".tar")
     if archive_path.exists() or archive_path.is_symlink():
         fail("OpenShell workspace archive already exists")
-    for root, dirs, files in os.walk(str(ctx["stage"]), followlinks=False):
-        for name in list(dirs) + files:
-            path = Path(root) / name
-            info = path.lstat()
-            rel = path.relative_to(ctx["stage"]).as_posix()
-            if not rel or rel.startswith("/") or "\\" in rel or any(part in ("", ".", "..") for part in rel.split("/")):
-                fail("task snapshot contains an unsupported archive path")
-            if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode)):
-                fail("task snapshot contains an unsupported archive entry at " + rel)
-            if stat.S_ISLNK(info.st_mode) and name in dirs:
-                dirs.remove(name)
     with tarfile.open(str(archive_path), mode="w", format=tarfile.PAX_FORMAT) as archive:
-        archive.add(str(ctx["stage"]), arcname=".", recursive=True)
+        archive.add(str(ctx["stage"] / ".git"), arcname="./.git", recursive=True)
+        for rel in git_paths(ctx["stage"]):
+            if state_for(ctx["stage"], rel)["kind"] != "missing":
+                archive.add(str(ctx["stage"] / rel), arcname="./" + rel, recursive=False)
     os.chmod(str(archive_path), 0o600)
     return archive_path
 
@@ -771,19 +765,66 @@ def download_workspace(ctx, journal):
     write_journal(ctx, journal)
     download_root.mkdir(mode=0o700)
     try:
-        openshell_run(ctx, "sandbox", "download", ctx["sandbox"], WORKSPACE_IN_SANDBOX, str(download_root))
-        if (download_root / ".git").is_dir():
-            candidate = download_root
-        else:
-            candidates = [item for item in download_root.iterdir() if item.is_dir() and (item / ".git").is_dir()]
-            if len(candidates) != 1:
-                fail("OpenShell download did not contain exactly one task Git workspace")
-            candidate = candidates[0]
-        if candidate.is_symlink() or not candidate.is_dir():
-            fail("OpenShell returned an invalid task workspace directory")
-        gitdir = candidate / ".git"
-        if gitdir.is_symlink() or not gitdir.is_dir():
-            fail("OpenShell snapshot omitted the task Git directory")
+        if journal.get("validation_requested"):
+            result = openshell_run(ctx, "sandbox", "exec", "--name", ctx["sandbox"],
+                                   "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--no-tty",
+                                   "--env", "GIT_CONFIG_GLOBAL=/dev/null", "--env", "GIT_CONFIG_NOSYSTEM=1",
+                                   "--", "git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+                                   "--git-dir=" + WORKSPACE_IN_SANDBOX + "/.git", "--work-tree=" + WORKSPACE_IN_SANDBOX,
+                                   "status", "--porcelain", "--untracked-files=all")
+            if result.stdout.strip():
+                fail("host validation handoff requires committed tracked changes and a clean sandbox worktree")
+        candidate = download_root / "workspace"
+        candidate.mkdir(mode=0o700)
+        openshell_run(ctx, "sandbox", "download", ctx["sandbox"], WORKSPACE_IN_SANDBOX + "/.git", str(candidate))
+        _, _, paths, _ = verify_stage({**ctx, "stage": candidate}, journal)
+        remote_archive = "/tmp/fm-openshell-" + secrets.token_hex(16) + ".tar"
+        packing = (
+            "import json,os,stat,sys,tarfile\n"
+            "root=sys.argv[1]\n"
+            "with tarfile.open(sys.argv[2], 'w') as archive:\n"
+            " for rel in json.load(sys.stdin):\n"
+            "  current=root\n"
+            "  for part in rel.split('/')[:-1]:\n"
+            "   current=os.path.join(current,part)\n"
+            "   if not os.path.isdir(current) or os.path.islink(current): break\n"
+            "  else:\n"
+            "   path=os.path.join(root,rel)\n"
+            "   try: mode=os.lstat(path).st_mode\n"
+            "   except FileNotFoundError: continue\n"
+            "   if stat.S_ISDIR(mode): continue\n"
+            "   if not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):\n"
+            "    raise SystemExit('unsupported tracked snapshot entry')\n"
+            "   archive.add(path, arcname=rel, recursive=False)\n"
+        )
+        openshell_run(ctx, "sandbox", "exec", "--name", ctx["sandbox"],
+                      "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--no-tty",
+                      "--", "python3", "-c", packing, WORKSPACE_IN_SANDBOX, remote_archive,
+                      input_bytes=json.dumps(paths, ensure_ascii=True).encode("ascii"))
+        openshell_run(ctx, "sandbox", "download", ctx["sandbox"], remote_archive, str(download_root))
+        archive_path = download_root / Path(remote_archive).name
+        if archive_path.is_symlink() or not archive_path.is_file():
+            fail("OpenShell snapshot archive is missing or unsafe")
+        with tarfile.open(str(archive_path)) as archive:
+            members = archive.getmembers()
+            names = set()
+            for member in members:
+                if member.name not in paths or member.name in names or not (member.isfile() or member.issym()):
+                    fail("OpenShell snapshot contains an unselected project entry")
+                names.add(member.name)
+            if any(parent in names for name in names for parent in (
+                "/".join(name.split("/")[:i]) for i in range(1, len(name.split("/")))
+            )):
+                fail("OpenShell snapshot contains a non-directory parent")
+            for member in members:
+                target = candidate / member.name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if member.issym():
+                    target.symlink_to(member.linkname)
+                else:
+                    with archive.extractfile(member) as source, target.open("xb") as output:
+                        shutil.copyfileobj(source, output)
+                    target.chmod(member.mode & 0o777)
         if ctx["stage"].exists():
             if seed.exists():
                 shutil.rmtree(str(seed))
@@ -1383,10 +1424,13 @@ def sync_workspace(ctx, journal):
     if journal.get("validation_requested"):
         require_committed_workspace(ctx["stage"])
     check_host_unchanged(ctx, journal)
+    for path in paths:
+        if path not in journal["base_paths"] and state_for(ctx["worktree"], path)["kind"] != "missing":
+            fail("sandbox tracked path collides with unrelated host data: " + path)
     backup = backup_host(ctx, journal)
     journal["phase"] = "syncing"
     journal["sync_head"] = head
-    journal["sync_paths"] = paths
+    journal["sync_paths"] = []
     journal["sync_files"] = states
     write_journal(ctx, journal)
     temporary_ref = "refs/fm-openshell/" + hashlib.sha256((ctx["id"] + str(ctx["home"])).encode()).hexdigest()[:32]
@@ -1407,7 +1451,10 @@ def sync_workspace(ctx, journal):
         if staged_patch:
             run(["git", "-C", str(ctx["worktree"]), "apply", "--cached", "--binary", "--whitespace=nowarn", "-"], env=cli_env(), input_bytes=staged_patch, capture=True)
         all_paths = set(paths) | set(journal["base_paths"])
-        apply_files(ctx["stage"], ctx["worktree"], all_paths, states, journal["base_files"], journal["base_files"])
+        def claim_path(rel):
+            journal["sync_paths"].append(rel)
+            write_journal(ctx, journal)
+        apply_files(ctx["stage"], ctx["worktree"], all_paths, states, journal["base_files"], journal["base_files"], claim_path)
         run(["git", "-C", str(ctx["worktree"]), "update-ref", "-d", temporary_ref], env=cli_env(), capture=True, check=False)
         journal["phase"] = "synced"
         if journal.get("validation_requested"):
