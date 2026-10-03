@@ -57,8 +57,24 @@ assert 'fm-workforce-answer.v1' in json.dumps(receipts)
 subprocess.run(['bash', str(pathlib.Path(cli).parent/'fm-inbox.sh'), 'drain', '--ack', first['id']], check=True, capture_output=True, env={k:v for k,v in os.environ.items() if not k.startswith('FM_') or k == 'FM_HOME'})
 assert call(['submit'], req)['acknowledged'], call(['submit'], req)
 second = call(['submit'], dict(req, request_id='validate-2'))
+interrupted = dict(req, request_id='interrupted')
+reserved = call(['submit'], interrupted)
+published = home/'state/inbox'/f"{reserved['id']}.note"
+staged = home/'state/inbox'/('.staging-' + reserved['id'].partition('-')[2])
+published.rename(staged)
+assert 'identity' in call(['submit'], dict(interrupted, scope=dict(scope, batch='different')), False)['error']
+assert not published.exists()
 (worktree/'file').write_text('two'); git('add', 'file'); git('commit', '-m', 'advance')
 assert 'stale head' in call(['answer', second['id']], answer, False)['error']
+recovered = call(['submit'], interrupted)
+assert recovered['id'] == reserved['id'] and recovered['outcome'] == 'replay'
+assert published.read_text().split('\n--\n', 1)[1] == staged.read_text().split('\n--\n', 1)[1]
+assert call(['submit'], interrupted)['id'] == reserved['id']
+assert 'identity' in call(['submit'], dict(interrupted, scope=dict(scope, batch='different')), False)['error']
+missing = dict(req, request_id='missing-staged')
+(home/'state/inbox/.requests/workforce:missing-staged').write_text('123456-missing\n')
+assert 'staged content unavailable' in call(['submit'], missing, False)['error']
+assert not (home/'state/inbox/123456-missing.note').exists()
 call(['submit'], dict(req, request_id='stale'), False)
 # Identity replay remains possible after work advances, never approves new head.
 assert call(['submit'], req)['outcome'] == 'replay'
@@ -113,6 +129,54 @@ job = request('new-worker', 'job-request', dict(project='demo'),
 call(['submit'], job)
 call(['submit'], dict(job, request_id='missing-snapshot', payload={k:v for k,v in job['payload'].items() if k != 'preference_revision'}), False)
 assert not (home/'config/crew-harness').exists()
+inherited = view['preferences']
+assert inherited['global']['harness']['value'] is None
+assert 'unresolved' in inherited['global']['harness']['source']
+os.environ['FM_SUPERVISION_ACTOR'] = 'branch'
+os.environ['FM_SUPERVISION_PRIMARY_HARNESS'] = 'pi'
+assert call(['status'])['preferences']['revision'] == inherited['revision']
+os.environ['CLAUDECODE'] = '1'
+assert call(['status'])['preferences']['revision'] == inherited['revision']
+for setting in ['default\n', ' \n']:
+    (home/'config/crew-harness').write_text(setting)
+    assert call(['status'])['preferences']['revision'] == inherited['revision']
+(home/'config/crew-harness').write_text('codex\n')
+explicit = call(['status'])['preferences']
+assert explicit['global']['harness'] == dict(value='codex', source='config/crew-harness')
+assert explicit['revision'] != inherited['revision']
+(home/'config/crew-harness').unlink()
+dispatch_path = home/'config/crew-dispatch.json'
+valid_profile = dict(harness='codex', model='catalog-model', effort='high')
+for default in [valid_profile, [valid_profile, dict(harness='claude', effort='max')]]:
+    dispatch_path.write_text(json.dumps(dict(default=default)))
+    snapshot = call(['status'])['preferences']
+    observed = snapshot['global']['dispatch_default']
+    assert observed['configuration_valid'] and observed['value'] == default
+    assert snapshot['revision'] != inherited['revision']
+invalid_configs = [
+    dict(default=dict(harness='codex', model=123, effort='high')),
+    dict(default=dict(harness='codex', model='')),
+    dict(default=dict(harness='')),
+    dict(default=dict(harness='unsupported')),
+    dict(default=dict(harness='codex', effort='')),
+    dict(default=dict(harness='codex', effort='invented')),
+    dict(default=dict(harness='codex', effort='max')),
+    dict(default=dict(harness='opencode', effort='high')),
+    dict(default=dict(harness='pi', model='other', effort='ultra')),
+    dict(default=[]), dict(default=[valid_profile, valid_profile]),
+    dict(default=[valid_profile, dict(harness='codex', model=None)]),
+    dict(default=valid_profile, rules=[dict(when='match', use=dict(harness='unsupported'))]),
+    [],
+]
+for config in invalid_configs:
+    dispatch_path.write_text(json.dumps(config))
+    snapshot = call(['status'])['preferences']
+    observed = snapshot['global']['dispatch_default']
+    assert not observed['configuration_valid'] and observed['value'] is None and observed['reason'], config
+    assert snapshot['revision'] != inherited['revision']
+dispatch_path.write_text('{malformed')
+assert not call(['status'])['preferences']['global']['dispatch_default']['configuration_valid']
+dispatch_path.unlink()
 assert not (home/'foreign-state').exists()
 assert not (home/'foreign-backlog.md').exists()
 # A fixture catalog proves only explicit authoritative identities are accepted.

@@ -367,7 +367,14 @@ def submit(home, env):
             try:
                 path = saved_note(home, note_id)
             except ValueError:
-                fail('incomplete inbox reservation; supervisor recovery required')
+                ident(note_id, 'note_id')
+                suffix = note_id.partition('-')[2]
+                path = home / 'state/inbox' / ('.staging-' + suffix)
+                if not suffix or not path.is_file():
+                    fail('incomplete inbox reservation; original staged content unavailable')
+                header = path.read_text().split('\n--\n', 1)[0].splitlines()
+                if 'id=' + note_id not in header or 'request_id=' + rid not in header:
+                    fail('incomplete inbox reservation; staged identity differs')
             if note_body(path) != body:
                 fail('request identity reused with different content')
             replay = True
@@ -455,24 +462,35 @@ def backend_projection(home, env):
 
 def profile_projection(profile):
     if isinstance(profile, list):
-        if not profile:
-            fail('empty dispatch default profile array')
         return [profile_projection(row) for row in profile]
-    if not isinstance(profile, dict) or not isinstance(profile.get('harness'), str):
-        fail('malformed dispatch default')
     return {key: value for key, value in profile.items()
-            if key in {'harness', 'model', 'effort'} and isinstance(value, str)}
+            if key in {'harness', 'model', 'effort'}}
 
 
 def preference_snapshot(home, env, policies, fleet):
     # Only project-mode and existing dispatch owners establish effective values.
     configured = home / 'config/crew-dispatch.json'
-    dispatch = json.loads(configured.read_text()) if configured.is_file() else None
-    if dispatch is not None and not isinstance(dispatch, dict):
-        fail('malformed dispatch configuration')
-    global_values = {'harness': {'value': output(env, 'fm-harness.sh', 'crew'),
-                                 'source': 'fm-harness.sh crew'},
-                     'dispatch_default': {'value': profile_projection(dispatch['default']) if dispatch and 'default' in dispatch else None,
+    dispatch_value = None
+    dispatch_valid = True
+    dispatch_reason = None
+    if configured.is_file():
+        raw = configured.read_text()
+        result = run(env, 'fm-dispatch-resolve.sh', '--validate-config', body=raw)
+        dispatch_valid = result.returncode == 0
+        if dispatch_valid:
+            dispatch = json.loads(raw)
+            if 'default' in dispatch:
+                dispatch_value = profile_projection(dispatch['default'])
+        else:
+            dispatch_reason = result.stderr.strip() or 'dispatch configuration validation unavailable'
+    harness_path = home / 'config/crew-harness'
+    configured_harness = ''.join(harness_path.read_text().split()) if harness_path.is_file() else ''
+    explicit_harness = configured_harness not in {'', 'default'}
+    global_values = {'harness': {'value': configured_harness if explicit_harness else None,
+                                 'source': 'config/crew-harness' if explicit_harness else 'inherited primary harness unresolved'},
+                     'dispatch_default': {'value': dispatch_value,
+                                          'configuration_valid': dispatch_valid,
+                                          'reason': dispatch_reason,
                                           'source': 'config/crew-dispatch.json' if configured.is_file() else 'absent'},
                      'posture': {'value': None, 'source': 'not registered by Firstmate'}}
     project_values = [{'project': row['project'], 'delivery': row['effective'],
