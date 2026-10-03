@@ -1,0 +1,4 @@
+/run/current-system/sw/bin/git
+/run/current-system/sw/bin/jq
+/run/current-system/sw/bin/nix
+/run/current-system/sw/bin/xrandr

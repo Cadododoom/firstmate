@@ -1,0 +1,10 @@
+{
+  "display": ":0",
+  "kvm_readable": true,
+  "cpus": 12,
+  "qemu_supplied_exists": true,
+  "iso_supplied_exists": true,
+  "memory": "               total        used        free      shared  buff/cache   available\nMem:            31Gi        13Gi        10Gi       999Mi       8.3Gi        17Gi\nSwap:           34Gi        16Gi        17Gi\n",
+  "guest_started": false,
+  "boundary": "Attached verification plan records lane VM slot unreleased. Release was requested during this Test turn; no release received. No graphical guest proof captured."
+}

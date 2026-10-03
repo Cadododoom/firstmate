@@ -1,0 +1,54 @@
+{
+  "verdict": "inconclusive",
+  "tested_head_sha": "70da969a01cef42325d881b6d4aa3f37aa35f28c",
+  "source_changed": false,
+  "guest": {
+    "visible": true,
+    "desktop": "NixOS 26.05 KDE Plasma",
+    "cpu": 1,
+    "ram_mib": 4096
+  },
+  "passed": [
+    "tests/fm-workforce.test.sh",
+    "tests/fm-inbox.test.sh after Perl closure import",
+    "six isolated real CLI scenarios inside graphical guest"
+  ],
+  "setup_failure": {
+    "subject": "tests/fm-inbox.test.sh",
+    "symptom": "expected held lock, got stale",
+    "root_cause": "perl absent from baseline guest PATH; live-lock holder fixture could not start",
+    "fix": "Imported existing immutable Perl closure and exposed its bin in guest process PATH",
+    "reverification": "Only tests/fm-inbox.test.sh rerun; exit 0"
+  },
+  "untested": [
+    {
+      "scenario": "Named helper-only Herdr lab integration and unchanged default-fleet tripwire proof",
+      "reason": "fm-herdr-lab.sh prepare refused: fleet-state tripwire requires exactly one running default session. Fresh isolated guest has none. Direct default server/session lifecycle is forbidden; no bypass or source changes made."
+    }
+  ],
+  "artifacts": [
+    "guest-launch.json",
+    "guest-source.json",
+    "guest-final-results.png",
+    "guest-workforce-checks.png",
+    "guest-targeted-tests.json",
+    "guest-inbox-retest.json",
+    "guest-integration.log",
+    "guest-inbox-retest.log",
+    "guest-exit.json"
+  ],
+  "guest_exit": {
+    "pid": 1586595,
+    "shutdown_command": "sudo poweroff typed into guest Konsole",
+    "bounded_wait_seconds": 45,
+    "observed_wait_seconds": 0.0,
+    "released": true,
+    "process": "",
+    "at": "2026-10-03T17:59:11.154833+00:00",
+    "qmp_socket_present": false,
+    "pidfile_present": false,
+    "memory": "               total        used        free      shared  buff/cache   available\nMem:           31799       12752        9611         813       10368       19047\nSwap:          34979       17661       17317\n",
+    "transient_disk_runtime_node_exchange_removed": true,
+    "no_forced_termination": true
+  }
+}

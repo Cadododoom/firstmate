@@ -1,0 +1,14 @@
+{
+  "pid": 1586595,
+  "shutdown_command": "sudo poweroff typed into guest Konsole",
+  "bounded_wait_seconds": 45,
+  "observed_wait_seconds": 0.0,
+  "released": true,
+  "process": "",
+  "at": "2026-10-03T17:59:11.154833+00:00",
+  "qmp_socket_present": false,
+  "pidfile_present": false,
+  "memory": "               total        used        free      shared  buff/cache   available\nMem:           31799       12752        9611         813       10368       19047\nSwap:          34979       17661       17317\n",
+  "transient_disk_runtime_node_exchange_removed": true,
+  "no_forced_termination": true
+}

@@ -1,0 +1,7 @@
+Isolated HOME/XDG/TMPDIR and tripwire state: /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M41CD8B6K3EEA20MPMVZMWPB/.herdr-verification-adp8fa0x
+Named helper session: fm-lab-workforce-test-1753774-22358
+$ bash bin/fm-herdr-lab.sh prepare fm-lab-workforce-test-1753774-22358
+exit: 1
+fm-herdr-lab: fleet-state tripwire requires exactly one running default session
+
+No provision/run/lifecycle attempted after refusal. No default session or operator data touched. Disposable directories removed.

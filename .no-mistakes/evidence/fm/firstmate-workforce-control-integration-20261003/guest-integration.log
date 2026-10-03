@@ -1,0 +1,316 @@
+NixOS graphical Test: committed head 70da969a01cef42325d881b6d4aa3f37aa35f28c
+ANSI_COLOR="0;38;2;126;186;228"
+BUG_REPORT_URL="https://github.com/NixOS/nixpkgs/issues"
+BUILD_ID="26.05.20260925.f5c082a"
+CPE_NAME="cpe:/o:nixos:nixos:26.05"
+DEFAULT_HOSTNAME=nixos
+DOCUMENTATION_URL="https://nixos.org/learn.html"
+HOME_URL="https://nixos.org/"
+ID=nixos
+ID_LIKE=""
+IMAGE_ID=""
+IMAGE_VERSION=""
+LOGO="nix-snowflake"
+NAME=NixOS
+PRETTY_NAME="NixOS 26.05 (Yarara)"
+SUPPORT_END="2026-12-31"
+SUPPORT_URL="https://nixos.org/community.html"
+VARIANT=""
+VARIANT_ID=installer
+VENDOR_NAME=NixOS
+VENDOR_URL="https://nixos.org/"
+VERSION="26.05 (Yarara)"
+VERSION_CODENAME=yarara
+VERSION_ID="26.05"
+1
+               total        used        free      shared  buff/cache   available
+Mem:            3918        1395         895         126        1977        2523
+Swap:              0           0           0
+/mnt/exchange/source.tar: OK
+fm-lab-workforce-test-1625-16984
+fm-herdr-lab: fleet-state tripwire requires exactly one running default session
+Herdr prepare exit: 1
+FM_TEST_BEGIN 2026-10-03T17:55:33Z tests/fm-workforce.test.sh family=standalone expected_gate_skip=none
+PASS: durable deduplication, supervisor routing/replies, exact scope/head, stale rejection, independent authority, window refusals and prospective defaults
+ok - Workforce typed public interface
+FM_TEST_END 2026-10-03T17:55:51Z tests/fm-workforce.test.sh exit=0 duration_ms=18081 gate_skip=false
+FM_TEST_BEGIN 2026-10-03T17:55:51Z tests/fm-inbox.test.sh family=unclassified expected_gate_skip=none
+ok - plain note, list, and wake stay on the historical human path
+ok - plain note keeps exit 1 for a saved-but-unannounced failure
+ok - the same request id returns the original note as a distinguishable replay
+ok - a crash between recording the request id and publishing the note reuses the original id
+ok - saved-but-unannounced notes are repairable without creating a second note
+ok - repair and replay do not wake firstmate for an already-acknowledged note
+ok - announced and acknowledged are independent receipt facts
+ok - receipts JSON is bounded by fixed bounds and discloses what it omitted
+ok - notes that predate the announcement marker are unknown, not re-announced
+ok - the reply channel is durable and its cursor is a strict order
+ok - the reply cursor never goes backwards when the sequence counter is lost
+ok - a reply without a valid sequence is reported as malformed
+ok - a non-UTF-8 note does not break the receipts view
+tests/fm-inbox.test.sh: line 493: perl: command not found
+not ok - a live claude-named holder is a held lock (expected 'held', got 'stale')
+FM_TEST_END 2026-10-03T17:55:59Z tests/fm-inbox.test.sh exit=1 duration_ms=7873 gate_skip=false
+FM_TEST_SUMMARY total=2 failed=1 skipped_gate=0 duration_ms=26103
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=18081 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=7873 failed=1
+FM_TEST_SLOWEST rank=1 script=tests/fm-workforce.test.sh duration_ms=18081
+FM_TEST_SLOWEST rank=2 script=tests/fm-inbox.test.sh duration_ms=7873
+fm-test-run: wrote timing artifact: /mnt/exchange/guest-targeted-tests.json
+Focused tests exit: 1
+$ bash /tmp/workforce-source/bin/fm-lab-home.sh create /tmp/workforce-source/.workforce-live-bktmuvac
+exit: 0
+/tmp/workforce-source/.workforce-live-bktmuvac
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo init -b fm/batch
+exit: 0
+Initialized empty Git repository in /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo/.git/
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo config user.name Disposable Test
+exit: 0
+
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo config user.email test@example.invalid
+exit: 0
+
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo add .
+exit: 0
+
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo commit -m Completed disposable batch
+exit: 0
+[fm/batch (root-commit) cc6063b] Completed disposable batch
+ 1 file changed, 1 insertion(+)
+ create mode 100644 batch.txt
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo rev-parse HEAD
+exit: 0
+cc6063ba13bbe5996824025b26abd5c78e9e2fb2
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "batch-1", "action": "validation-request", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}, "payload": {"posture": "assistant", "delivery_mode": "no-mistakes"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050160-83v1ru","request_id":"workforce:batch-1","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050160-83v1ru.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "batch-1", "action": "validation-request", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}, "payload": {"posture": "assistant", "delivery_mode": "no-mistakes"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"replay","id":"1791050160-83v1ru","request_id":"workforce:batch-1","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050160-83v1ru.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "batch-1", "action": "validation-request", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}, "payload": {"posture": "assistant", "delivery_mode": "direct-PR"}}
+exit: 1
+{"error":"validation is an Assistant no-mistakes request","schema":"fm-workforce-error.v1"}
+
+DURABLE WAKE: 1791050160	1	check	inbox:1791050160-83v1ru	check: captain inbox note 1791050160-83v1ru - Workforce request v1 {"action":"validation-request","payload":{"delivery_mode":"no-mistakes","postur
+
+DURABLE NOTE: id=1791050160-83v1ru
+at=2026-10-03T17:56:00Z
+source=text
+announce_marker=1
+request_id=workforce:batch-1
+--
+Workforce request v1
+{"action":"validation-request","payload":{"delivery_mode":"no-mistakes","posture":"assistant"},"request_id":"batch-1","schema":"fm-workforce-request.v1","scope":{"batch":"batch-v1","branch":"fm/batch","head":"cc6063ba13bbe5996824025b26abd5c78e9e2fb2","job":"job","project":"demo"}}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py answer 1791050160-83v1ru
+stdin: {"decision": "approved", "reason": "exact completed batch", "scope": {"project": "demo", "job": "job", "batch": "wrong", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}}
+exit: 1
+{"error":"answer scope differs from request","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py answer 1791050160-83v1ru
+stdin: {"decision": "approved", "reason": "exact completed batch", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}}
+exit: 0
+{"schema":"fm-inbox-reply.v1","outcome":"created","id":"1791050160-83v1ru","path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/.replies/1791050160-83v1ru"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py receipts --all-replies
+exit: 0
+{"schema":"fm-inbox-receipts.v1","home":"workforce-source/.workforce-live-bktmuvac","generated":"2026-10-03T17:56:00Z","pending":[{"id":"1791050160-83v1ru","at":"2026-10-03T17:56:00Z","source":"text","request_id":"workforce:batch-1","body":"Workforce request v1\n{\"action\":\"validation-request\",\"payload\":{\"delivery_mode\":\"no-mistakes\",\"posture\":\"assistant\"},\"request_id\":\"batch-1\",\"schema\":\"fm-workforce-request.v1\",\"scope\":{\"batch\":\"batch-v1\",\"branch\":\"fm/batch\",\"head\":\"cc6063ba13bbe5996824025b26abd5c78e9e2fb2\",\"job\":\"job\",\"project\":\"demo\"}}","acknowledged":false,"announced":true,"reply":{"id":"1791050160-83v1ru","at":"2026-10-03T17:56:00Z","body":"{\"action\":\"validation-request\",\"decision\":\"approved\",\"effect\":\"answer-only; normal supervisor intake owns execution and authority\",\"observed_at\":\"2026-10-03T17:56:00.392758+00:00\",\"provenance\":\"firstmate:fm-inbox.sh reply\",\"reason\":\"exact completed batch\",\"request_id\":\"batch-1\",\"schema\":\"fm-workforce-answer.v1\",\"scope\":{\"batch\":\"batch-v1\",\"branch\":\"fm/batch\",\"head\":\"cc6063ba13bbe5996824025b26abd5c78e9e2fb2\",\"job\":\"job\",\"project\":\"demo\"}}","cursor":"000000000001"}}],"handled":[],"replies":[{"id":"1791050160-83v1ru","at":"2026-10-03T17:56:00Z","body":"{\"action\":\"validation-request\",\"decision\":\"approved\",\"effect\":\"answer-only; normal supervisor intake owns execution and authority\",\"observed_at\":\"2026-10-03T17:56:00.392758+00:00\",\"provenance\":\"firstmate:fm-inbox.sh reply\",\"reason\":\"exact completed batch\",\"request_id\":\"batch-1\",\"schema\":\"fm-workforce-answer.v1\",\"scope\":{\"batch\":\"batch-v1\",\"branch\":\"fm/batch\",\"head\":\"cc6063ba13bbe5996824025b26abd5c78e9e2fb2\",\"job\":\"job\",\"project\":\"demo\"}}","cursor":"000000000001"}],"reply_cursor":"000000000001","omitted":[]}
+
+$ bash /tmp/workforce-source/bin/fm-inbox.sh drain --ack 1791050160-83v1ru
+exit: 0
+acked 1791050160-83v1ru
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "batch-1", "action": "validation-request", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}, "payload": {"posture": "assistant", "delivery_mode": "no-mistakes"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"replay","id":"1791050160-83v1ru","request_id":"workforce:batch-1","saved":true,"announced":true,"acknowledged":true,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/handled/1791050160-83v1ru.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "batch-2", "action": "validation-request", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}, "payload": {"posture": "assistant", "delivery_mode": "no-mistakes"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050160-RMOjBC","request_id":"workforce:batch-2","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050160-RMOjBC.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py answer 1791050160-RMOjBC
+stdin: {"decision": "approved", "reason": "exact completed batch", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}}
+exit: 1
+{"error":"completed batch has uncommitted changes","schema":"fm-workforce-error.v1"}
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo add .
+exit: 0
+
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo commit -m New batch
+exit: 0
+[fm/batch b5d2b21] New batch
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py answer 1791050160-RMOjBC
+stdin: {"decision": "approved", "reason": "exact completed batch", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}}
+exit: 1
+{"error":"stale head scope","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "batch-1", "action": "validation-request", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "cc6063ba13bbe5996824025b26abd5c78e9e2fb2"}, "payload": {"posture": "assistant", "delivery_mode": "no-mistakes"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"replay","id":"1791050160-83v1ru","request_id":"workforce:batch-1","saved":true,"announced":true,"acknowledged":true,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/handled/1791050160-83v1ru.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "policy-local-only-assistant", "action": "policy-request", "scope": {"project": "demo"}, "payload": {"posture": "assistant", "delivery_mode": "local-only", "merge_autonomy": true}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050161-2RV3Tj","request_id":"workforce:policy-local-only-assistant","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050161-2RV3Tj.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "policy-local-only-autonomy", "action": "policy-request", "scope": {"project": "demo"}, "payload": {"posture": "autonomy", "delivery_mode": "local-only", "merge_autonomy": true}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050161-LS5HSp","request_id":"workforce:policy-local-only-autonomy","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050161-LS5HSp.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "policy-direct-PR-assistant", "action": "policy-request", "scope": {"project": "demo"}, "payload": {"posture": "assistant", "delivery_mode": "direct-PR", "merge_autonomy": true}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050161-uJ27d4","request_id":"workforce:policy-direct-PR-assistant","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050161-uJ27d4.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "policy-direct-PR-autonomy", "action": "policy-request", "scope": {"project": "demo"}, "payload": {"posture": "autonomy", "delivery_mode": "direct-PR", "merge_autonomy": true}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050161-vy1DCg","request_id":"workforce:policy-direct-PR-autonomy","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050161-vy1DCg.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "policy-no-mistakes-assistant", "action": "policy-request", "scope": {"project": "demo"}, "payload": {"posture": "assistant", "delivery_mode": "no-mistakes", "merge_autonomy": true}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050161-w8XX3h","request_id":"workforce:policy-no-mistakes-assistant","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050161-w8XX3h.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "policy-no-mistakes-autonomy", "action": "policy-request", "scope": {"project": "demo"}, "payload": {"posture": "autonomy", "delivery_mode": "no-mistakes", "merge_autonomy": true}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050162-p9nesl","request_id":"workforce:policy-no-mistakes-autonomy","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050162-p9nesl.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "injection", "action": "policy-request", "scope": {"project": "demo"}, "payload": {"posture": "assistant", "delivery_mode": "local-only", "merge_autonomy": false, "executable": "/bin/sh"}}
+exit: 1
+{"error":"unknown fields or non-object","schema":"fm-workforce-error.v1"}
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo rev-parse HEAD
+exit: 0
+b5d2b21082496ae0ade42086d222aff77fe481fe
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "local-validation", "action": "validation-request", "scope": {"project": "demo", "job": "job", "batch": "batch-v1", "branch": "fm/batch", "head": "b5d2b21082496ae0ade42086d222aff77fe481fe"}, "payload": {"posture": "assistant", "delivery_mode": "no-mistakes"}}
+exit: 1
+{"error":"local-only job cannot request a publishing pipeline","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py status
+exit: 0
+{"backends":{"configuration_valid":true,"configured":null,"effective":"recorded per job; new-spawn detection remains supervisor-owned","experimental_lifecycle":"unavailable through this bridge","known":["tmux","herdr","zellij","orca","cmux"],"provenance":"fm-backend.sh + config/backend"},"fleet":{"backlog":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/backlog.md","present":false,"records":[]},"contributions":{"captain":[],"captain_omitted":0,"checked":0,"complete":false,"counts":{"captain":0,"fleet":0,"maintainer":0,"nobody":0},"known":0,"missing_verdicts":0,"proven_clear":false,"stale_verdicts":0,"unmeasured":0,"unreadable_records":1,"valid_until":900},"fm_home":"/tmp/workforce-source/.workforce-live-bktmuvac","generated":"2026-10-03T17:56:02Z","main_inventory":{"orphan_in_flight":[],"reason":null,"unstructured_current_count":0,"valid":true},"roots":{"config":"/tmp/workforce-source/.workforce-live-bktmuvac/config","data":"/tmp/workforce-source/.workforce-live-bktmuvac/data","fm_root":"/tmp/workforce-source","projects":"/tmp/workforce-source/.workforce-live-bktmuvac/projects","state":"/tmp/workforce-source/.workforce-live-bktmuvac/state"},"schema":"fm-fleet-snapshot.v1","scout_reports":[],"secondmate_current":{"records":[],"registry":{"available":true,"complete":true,"freshness":{"observed_at":"2026-10-03T17:56:02Z","status":"fresh"},"input_truncated":false,"lines_in_window":0,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/secondmates.md","present":false,"provenance":"registered-table","reason":null,"reasons":[],"records":[],"records_in_window":0,"records_truncated":false},"shown":0,"total":0,"total_registered":0,"truncated":0},"secondmate_guidance":{"note":"For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."},"secondmate_landed":{"partial":[],"records":[],"truncated":[],"unreadable":[]},"tasks":[{"actions":{"return_channel_note":null,"steer":"bin/fm-send.sh fm-job '<instruction>'","watch":"bin/fm-peek.sh fm-job"},"backend":"tmux","backlog":null,"branch":"fm/batch","current_state":{"detail":"no backend target recorded","freshness":"fresh","observed_at":"2026-10-03T17:56:02Z","raw":"state: unknown \u00b7 source: none \u00b7 no backend target recorded","source":"none","state":"unknown"},"endpoint":{"agent_alive":"not_checked","exists":null,"freshness":"fresh","observed_at":"2026-10-03T17:56:02Z","status":"unknown","target":null},"harness":"codex","hints":{"blocked_event":false,"last_event_text":"","open_decisions":[],"pending_decision":false,"scout_report_present":false},"id":"job","kind":"ship","mode":"direct-PR","paths":{"home":{"path":null,"present":false},"meta":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/job.meta","present":true},"report":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/job/report.md","present":false},"status_log":{"kind":"event_history","last_event":{"age_seconds":null,"note":"","raw":"","state":""},"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/job.status","present":false},"worktree":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/projects/demo","present":true}},"pr":{"head":null,"source":"absent","url":null},"project":"/tmp/workforce-source/.workforce-live-bktmuvac/projects/demo","remote":null,"secondmate_projects":[],"spawn_gen":"gen-1","yolo":"off"}]},"model_catalogs":[{"harness":"claude","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"codex","models":[],"provenance":"codex models_cache.json","reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"opencode","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"pi","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"pi-signed","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"grok","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"kimi","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"cursor","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"gemini","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"muse","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"rovo","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"omp","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"agy","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"devin","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"}],"preferences":{"application":"requested defaults are not effective until supervisor-owned intake applies them","global":{"dispatch_default":{"configuration_valid":true,"reason":null,"source":"absent","value":null},"harness":{"source":"inherited primary harness unresolved","value":null},"posture":{"source":"not registered by Firstmate","value":null}},"jobs":[{"backend":"tmux","delivery_mode":"direct-PR","effort":null,"generation":"gen-1","harness":"codex","job":"job","merge_autonomy":"off","model":null,"profile_observation":"same-generation","project":"demo","source":"recorded task metadata; unaffected by prospective defaults"}],"new_worker":"snapshot is an observation, not a dispatch grant; supervisor resolves rules at intake","precedence":["global","project","explicit-job"],"projects":[{"branch_prefix":"fm/","delivery":"direct-PR off","forge":"none","project":"demo","source":"fm-project-mode.sh","worker_preferences":"inherit global; task-specific supervisor dispatch rules may override"}],"revision":"446a3613fe634347a6a448631f438df4f00375b5c36308dcfa86e7305303f2b0"},"projects":[{"branch_prefix":"fm/","effective":"direct-PR off","forge":"none","project":"demo","provenance":"fm-project-mode.sh","registered":"direct-PR off"}],"provenance":["fm-fleet-snapshot.sh","fm-inbox.sh ready","fm-control-lib.sh","fm-backend.sh"],"readiness":{"can_receive":false,"home":"workforce-source/.workforce-live-bktmuvac","lock":{"live_harness":false,"pid":null,"state":"free"},"observed_at":"2026-10-03T17:56:02Z","posture":{"state":"present"},"schema":"fm-primary-ready.v1","wake_consumer":{"beacon_age_seconds":null,"reason":"supervision-model-unknown-for-home","state":"unknown"}},"schema":"fm-workforce-status.v1","unsupported":["direct-execution","teardown","merge","check-waiver","credentials","remote-provisioning","public-relay-enable"],"windows":[{"backend":"tmux","generation":"gen-1","job":"job","project":"demo","verbs":{"exit":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"focus":{"direct_execution":false,"reason":"unsupported window request: no portable guarded focus/open owner","request_supported":false},"interrupt":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"open":{"direct_execution":false,"reason":"unsupported window request: no portable guarded focus/open owner","request_supported":false},"relaunch":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"send-instruction":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true}}}]}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "window-exit", "action": "window-request", "scope": {"project": "demo", "job": "job", "generation": "gen-1"}, "payload": {"verb": "exit"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050162-P9strd","request_id":"workforce:window-exit","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050162-P9strd.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "window-focus", "action": "window-request", "scope": {"project": "demo", "job": "job", "generation": "gen-1"}, "payload": {"verb": "focus"}}
+exit: 1
+{"error":"unsupported window request: no portable guarded focus/open owner","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "window-interrupt", "action": "window-request", "scope": {"project": "demo", "job": "job", "generation": "gen-1"}, "payload": {"verb": "interrupt"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050162-UWjhx6","request_id":"workforce:window-interrupt","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050162-UWjhx6.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "window-open", "action": "window-request", "scope": {"project": "demo", "job": "job", "generation": "gen-1"}, "payload": {"verb": "open"}}
+exit: 1
+{"error":"unsupported window request: no portable guarded focus/open owner","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "window-relaunch", "action": "window-request", "scope": {"project": "demo", "job": "job", "generation": "gen-1"}, "payload": {"verb": "relaunch", "text": "checkpoint"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050163-CkZN6V","request_id":"workforce:window-relaunch","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050163-CkZN6V.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "window-send-instruction", "action": "window-request", "scope": {"project": "demo", "job": "job", "generation": "gen-1"}, "payload": {"verb": "send-instruction", "text": "checkpoint"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050163-BDkeO1","request_id":"workforce:window-send-instruction","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050163-BDkeO1.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "stale-generation", "action": "window-request", "scope": {"project": "demo", "job": "job", "generation": "gen-0"}, "payload": {"verb": "exit"}}
+exit: 1
+{"error":"stale job generation","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py status
+exit: 0
+{"backends":{"configuration_valid":true,"configured":null,"effective":"recorded per job; new-spawn detection remains supervisor-owned","experimental_lifecycle":"unavailable through this bridge","known":["tmux","herdr","zellij","orca","cmux"],"provenance":"fm-backend.sh + config/backend"},"fleet":{"backlog":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/backlog.md","present":false,"records":[]},"contributions":{"captain":[],"captain_omitted":0,"checked":0,"complete":false,"counts":{"captain":0,"fleet":0,"maintainer":0,"nobody":0},"known":0,"missing_verdicts":0,"proven_clear":false,"stale_verdicts":0,"unmeasured":0,"unreadable_records":1,"valid_until":900},"fm_home":"/tmp/workforce-source/.workforce-live-bktmuvac","generated":"2026-10-03T17:56:03Z","main_inventory":{"orphan_in_flight":[],"reason":null,"unstructured_current_count":0,"valid":true},"roots":{"config":"/tmp/workforce-source/.workforce-live-bktmuvac/config","data":"/tmp/workforce-source/.workforce-live-bktmuvac/data","fm_root":"/tmp/workforce-source","projects":"/tmp/workforce-source/.workforce-live-bktmuvac/projects","state":"/tmp/workforce-source/.workforce-live-bktmuvac/state"},"schema":"fm-fleet-snapshot.v1","scout_reports":[],"secondmate_current":{"records":[{"active_children":[],"contradiction":false,"counts":{"active_children":0,"decisions_open":0,"endpoints":0,"holds":0,"landed":0,"queued":0},"current":{"reason":"secondmate metadata is not registered","state":"unknown"},"decisions_open":[],"endpoints":[],"freshness":{"age_seconds":null,"observed_at":"2026-10-03T17:56:03Z","status":"unknown"},"holds":[],"home":null,"host":null,"id":"job","invalidity":null,"landed":[],"omitted":[],"parent_event":{"activity_scan":{"available":true,"input_truncated":false,"lines_in_window":0,"reasons":[],"records":[],"records_in_window":0,"retained_truncated":false},"age_seconds":null,"note":"","open_activities":[],"open_decisions":[],"raw":""},"provenance":{"parent_event_role":"fallback-only-not-current","selected":"unknown","structured_home":null},"queued":[],"reconcile_inventory":null,"registered":false,"remote":false,"spawn_gen":"gen-1","terminal_evidence":{"bytes":0,"captured":false,"contradiction":false,"event_note_seen":false,"freshness":"not-collected","lines":0,"observed_at":"2026-10-03T17:56:03Z","provenance":"parent-direct-report-terminal","reason":"no parent event to compare","trust":"untrusted-supplement"}}],"registry":{"available":true,"complete":true,"freshness":{"observed_at":"2026-10-03T17:56:03Z","status":"fresh"},"input_truncated":false,"lines_in_window":0,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/secondmates.md","present":false,"provenance":"registered-table","reason":null,"reasons":[],"records":[],"records_in_window":0,"records_truncated":false},"shown":1,"total":1,"total_registered":0,"truncated":0},"secondmate_guidance":{"note":"For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."},"secondmate_landed":{"partial":[],"records":[],"truncated":[],"unreadable":["<job: unavailable>"]},"tasks":[{"actions":{"return_channel_note":"Secondmate answers come back through status/doc paths after a marked fm-send request.","send":"bin/fm-send.sh fm-job '<request>'","watch":"read status/doc return channel; do not routinely fm-peek a secondmate for answers"},"backend":"tmux","backlog":null,"branch":"fm/batch","current_state":{"detail":"no backend target recorded","freshness":"fresh","observed_at":"2026-10-03T17:56:03Z","raw":"state: unknown \u00b7 source: none \u00b7 no backend target recorded","source":"none","state":"unknown"},"endpoint":{"agent_alive":"not_checked","exists":null,"freshness":"fresh","observed_at":"2026-10-03T17:56:03Z","status":"unknown","target":null},"harness":"pi","hints":{"blocked_event":false,"last_event_text":"","open_decisions":[],"pending_decision":false,"scout_report_present":false},"id":"job","kind":"secondmate","mode":"direct-PR","paths":{"home":{"path":null,"present":false},"meta":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/job.meta","present":true},"report":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/job/report.md","present":false},"status_log":{"kind":"event_history","last_event":{"age_seconds":null,"note":"","raw":"","state":""},"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/job.status","present":false},"worktree":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/projects/demo","present":true}},"pr":{"head":null,"source":"absent","url":null},"project":"/tmp/workforce-source/.workforce-live-bktmuvac/secondmates/demo","remote":null,"secondmate_projects":[],"spawn_gen":"gen-1","yolo":"off"}]},"model_catalogs":[{"harness":"claude","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"codex","models":[],"provenance":"codex models_cache.json","reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"opencode","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"pi","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"pi-signed","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"grok","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"kimi","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"cursor","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"gemini","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"muse","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"rovo","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"omp","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"agy","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"devin","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"}],"preferences":{"application":"requested defaults are not effective until supervisor-owned intake applies them","global":{"dispatch_default":{"configuration_valid":true,"reason":null,"source":"absent","value":null},"harness":{"source":"inherited primary harness unresolved","value":null},"posture":{"source":"not registered by Firstmate","value":null}},"jobs":[{"backend":"tmux","delivery_mode":"direct-PR","effort":null,"generation":"gen-1","harness":"pi","job":"job","merge_autonomy":"off","model":null,"profile_observation":"same-generation","project":"demo","source":"recorded task metadata; unaffected by prospective defaults"}],"new_worker":"snapshot is an observation, not a dispatch grant; supervisor resolves rules at intake","precedence":["global","project","explicit-job"],"projects":[{"branch_prefix":"fm/","delivery":"direct-PR off","forge":"none","project":"demo","source":"fm-project-mode.sh","worker_preferences":"inherit global; task-specific supervisor dispatch rules may override"}],"revision":"5e17cfb2255911f1e8d798d1eb472c153a8ffa35e09635ae5902bfdf58149a8d"},"projects":[{"branch_prefix":"fm/","effective":"direct-PR off","forge":"none","project":"demo","provenance":"fm-project-mode.sh","registered":"direct-PR off"}],"provenance":["fm-fleet-snapshot.sh","fm-inbox.sh ready","fm-control-lib.sh","fm-backend.sh"],"readiness":{"can_receive":false,"home":"workforce-source/.workforce-live-bktmuvac","lock":{"live_harness":false,"pid":null,"state":"free"},"observed_at":"2026-10-03T17:56:03Z","posture":{"state":"present"},"schema":"fm-primary-ready.v1","wake_consumer":{"beacon_age_seconds":null,"reason":"supervision-model-unknown-for-home","state":"unknown"}},"schema":"fm-workforce-status.v1","unsupported":["direct-execution","teardown","merge","check-waiver","credentials","remote-provisioning","public-relay-enable"],"windows":[{"backend":"tmux","generation":"gen-1","job":"job","project":"demo","verbs":{"exit":{"direct_execution":false,"reason":"job/project scope mismatch","request_supported":false},"focus":{"direct_execution":false,"reason":"job/project scope mismatch","request_supported":false},"interrupt":{"direct_execution":false,"reason":"job/project scope mismatch","request_supported":false},"open":{"direct_execution":false,"reason":"job/project scope mismatch","request_supported":false},"relaunch":{"direct_execution":false,"reason":"job/project scope mismatch","request_supported":false},"send-instruction":{"direct_execution":false,"reason":"job/project scope mismatch","request_supported":false}}}]}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "defaults-global", "action": "defaults-request", "scope": {"level": "global"}, "payload": {"harness": "codex", "effort": "high"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050163-Vai0XY","request_id":"workforce:defaults-global","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050163-Vai0XY.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py answer 1791050163-Vai0XY
+stdin: {"decision": "approved", "reason": "supported preferences", "scope": {"level": "global"}}
+exit: 0
+{"schema":"fm-inbox-reply.v1","outcome":"created","id":"1791050163-Vai0XY","path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/.replies/1791050163-Vai0XY"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "ultra-global", "action": "defaults-request", "scope": {"level": "global"}, "payload": {"harness": "codex", "effort": "ultra"}}
+exit: 1
+{"error":"error: ultra effort requires pi or pi-signed with an explicit codex-native/<model> model","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "defaults-project", "action": "defaults-request", "scope": {"level": "project", "project": "demo"}, "payload": {"harness": "codex", "effort": "high"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050164-4iahby","request_id":"workforce:defaults-project","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050164-4iahby.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py answer 1791050164-4iahby
+stdin: {"decision": "approved", "reason": "supported preferences", "scope": {"level": "project", "project": "demo"}}
+exit: 0
+{"schema":"fm-inbox-reply.v1","outcome":"created","id":"1791050164-4iahby","path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/.replies/1791050164-4iahby"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "ultra-project", "action": "defaults-request", "scope": {"level": "project", "project": "demo"}, "payload": {"harness": "codex", "effort": "ultra"}}
+exit: 1
+{"error":"error: ultra effort requires pi or pi-signed with an explicit codex-native/<model> model","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "defaults-job", "action": "defaults-request", "scope": {"level": "job", "project": "demo", "job": "job", "generation": "gen-1"}, "payload": {"harness": "codex", "effort": "high"}}
+exit: 0
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1791050164-MMKe2W","request_id":"workforce:defaults-job","saved":true,"announced":true,"acknowledged":false,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/1791050164-MMKe2W.note"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py answer 1791050164-MMKe2W
+stdin: {"decision": "approved", "reason": "supported preferences", "scope": {"level": "job", "project": "demo", "job": "job", "generation": "gen-1"}}
+exit: 0
+{"schema":"fm-inbox-reply.v1","outcome":"created","id":"1791050164-MMKe2W","path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/inbox/.replies/1791050164-MMKe2W"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py submit
+stdin: {"schema": "fm-workforce-request.v1", "request_id": "ultra-job", "action": "defaults-request", "scope": {"level": "job", "project": "demo", "job": "job", "generation": "gen-1"}, "payload": {"harness": "codex", "effort": "ultra"}}
+exit: 1
+{"error":"error: ultra effort requires pi or pi-signed with an explicit codex-native/<model> model","schema":"fm-workforce-error.v1"}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py status
+exit: 0
+{"backends":{"configuration_valid":true,"configured":null,"effective":"recorded per job; new-spawn detection remains supervisor-owned","experimental_lifecycle":"unavailable through this bridge","known":["tmux","herdr","zellij","orca","cmux"],"provenance":"fm-backend.sh + config/backend"},"fleet":{"backlog":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/backlog.md","present":false,"records":[]},"contributions":{"captain":[],"captain_omitted":0,"checked":0,"complete":false,"counts":{"captain":0,"fleet":0,"maintainer":0,"nobody":0},"known":0,"missing_verdicts":0,"proven_clear":false,"stale_verdicts":0,"unmeasured":0,"unreadable_records":1,"valid_until":900},"fm_home":"/tmp/workforce-source/.workforce-live-bktmuvac","generated":"2026-10-03T17:56:04Z","main_inventory":{"orphan_in_flight":[],"reason":null,"unstructured_current_count":0,"valid":true},"roots":{"config":"/tmp/workforce-source/.workforce-live-bktmuvac/config","data":"/tmp/workforce-source/.workforce-live-bktmuvac/data","fm_root":"/tmp/workforce-source","projects":"/tmp/workforce-source/.workforce-live-bktmuvac/projects","state":"/tmp/workforce-source/.workforce-live-bktmuvac/state"},"schema":"fm-fleet-snapshot.v1","scout_reports":[],"secondmate_current":{"records":[],"registry":{"available":true,"complete":true,"freshness":{"observed_at":"2026-10-03T17:56:04Z","status":"fresh"},"input_truncated":false,"lines_in_window":0,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/secondmates.md","present":false,"provenance":"registered-table","reason":null,"reasons":[],"records":[],"records_in_window":0,"records_truncated":false},"shown":0,"total":0,"total_registered":0,"truncated":0},"secondmate_guidance":{"note":"For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."},"secondmate_landed":{"partial":[],"records":[],"truncated":[],"unreadable":[]},"tasks":[{"actions":{"return_channel_note":null,"steer":"bin/fm-send.sh fm-job '<instruction>'","watch":"bin/fm-peek.sh fm-job"},"backend":"tmux","backlog":null,"branch":"fm/batch","current_state":{"detail":"no backend target recorded","freshness":"fresh","observed_at":"2026-10-03T17:56:04Z","raw":"state: unknown \u00b7 source: none \u00b7 no backend target recorded","source":"none","state":"unknown"},"endpoint":{"agent_alive":"not_checked","exists":null,"freshness":"fresh","observed_at":"2026-10-03T17:56:04Z","status":"unknown","target":null},"harness":"codex","hints":{"blocked_event":false,"last_event_text":"","open_decisions":[],"pending_decision":false,"scout_report_present":false},"id":"job","kind":"ship","mode":"direct-PR","paths":{"home":{"path":null,"present":false},"meta":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/job.meta","present":true},"report":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/job/report.md","present":false},"status_log":{"kind":"event_history","last_event":{"age_seconds":null,"note":"","raw":"","state":""},"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/job.status","present":false},"worktree":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/projects/demo","present":true}},"pr":{"head":null,"source":"absent","url":null},"project":"/tmp/workforce-source/.workforce-live-bktmuvac/projects/demo","remote":null,"secondmate_projects":[],"spawn_gen":"gen-1","yolo":"off"}]},"model_catalogs":[{"harness":"claude","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"codex","models":[],"provenance":"codex models_cache.json","reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"opencode","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"pi","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"pi-signed","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"grok","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"kimi","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"cursor","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"gemini","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"muse","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"rovo","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"omp","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"agy","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"devin","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"}],"preferences":{"application":"requested defaults are not effective until supervisor-owned intake applies them","global":{"dispatch_default":{"configuration_valid":true,"reason":null,"source":"absent","value":null},"harness":{"source":"config/crew-harness","value":"codex"},"posture":{"source":"not registered by Firstmate","value":null}},"jobs":[{"backend":"tmux","delivery_mode":"direct-PR","effort":null,"generation":"gen-1","harness":"codex","job":"job","merge_autonomy":"off","model":null,"profile_observation":"same-generation","project":"demo","source":"recorded task metadata; unaffected by prospective defaults"}],"new_worker":"snapshot is an observation, not a dispatch grant; supervisor resolves rules at intake","precedence":["global","project","explicit-job"],"projects":[{"branch_prefix":"fm/","delivery":"direct-PR off","forge":"none","project":"demo","source":"fm-project-mode.sh","worker_preferences":"inherit global; task-specific supervisor dispatch rules may override"}],"revision":"4b2928f79e71f932ae7d9b7f2f36f82b03a4beaefd6c3ccad5379269c2ed1087"},"projects":[{"branch_prefix":"fm/","effective":"direct-PR off","forge":"none","project":"demo","provenance":"fm-project-mode.sh","registered":"direct-PR off"}],"provenance":["fm-fleet-snapshot.sh","fm-inbox.sh ready","fm-control-lib.sh","fm-backend.sh"],"readiness":{"can_receive":false,"home":"workforce-source/.workforce-live-bktmuvac","lock":{"live_harness":false,"pid":null,"state":"free"},"observed_at":"2026-10-03T17:56:05Z","posture":{"state":"present"},"schema":"fm-primary-ready.v1","wake_consumer":{"beacon_age_seconds":null,"reason":"supervision-model-unknown-for-home","state":"unknown"}},"schema":"fm-workforce-status.v1","unsupported":["direct-execution","teardown","merge","check-waiver","credentials","remote-provisioning","public-relay-enable"],"windows":[{"backend":"tmux","generation":"gen-1","job":"job","project":"demo","verbs":{"exit":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"focus":{"direct_execution":false,"reason":"unsupported window request: no portable guarded focus/open owner","request_supported":false},"interrupt":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"open":{"direct_execution":false,"reason":"unsupported window request: no portable guarded focus/open owner","request_supported":false},"relaunch":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"send-instruction":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true}}}]}
+
+$ python3 /tmp/workforce-source/bin/fm-workforce.py status
+exit: 0
+{"backends":{"configuration_valid":true,"configured":null,"effective":"recorded per job; new-spawn detection remains supervisor-owned","experimental_lifecycle":"unavailable through this bridge","known":["tmux","herdr","zellij","orca","cmux"],"provenance":"fm-backend.sh + config/backend"},"fleet":{"backlog":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/backlog.md","present":false,"records":[]},"contributions":{"captain":[],"captain_omitted":0,"checked":0,"complete":false,"counts":{"captain":0,"fleet":0,"maintainer":0,"nobody":0},"known":0,"missing_verdicts":0,"proven_clear":false,"stale_verdicts":0,"unmeasured":0,"unreadable_records":1,"valid_until":900},"fm_home":"/tmp/workforce-source/.workforce-live-bktmuvac","generated":"2026-10-03T17:56:05Z","main_inventory":{"orphan_in_flight":[],"reason":null,"unstructured_current_count":0,"valid":true},"roots":{"config":"/tmp/workforce-source/.workforce-live-bktmuvac/config","data":"/tmp/workforce-source/.workforce-live-bktmuvac/data","fm_root":"/tmp/workforce-source","projects":"/tmp/workforce-source/.workforce-live-bktmuvac/projects","state":"/tmp/workforce-source/.workforce-live-bktmuvac/state"},"schema":"fm-fleet-snapshot.v1","scout_reports":[],"secondmate_current":{"records":[],"registry":{"available":true,"complete":true,"freshness":{"observed_at":"2026-10-03T17:56:05Z","status":"fresh"},"input_truncated":false,"lines_in_window":0,"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/secondmates.md","present":false,"provenance":"registered-table","reason":null,"reasons":[],"records":[],"records_in_window":0,"records_truncated":false},"shown":0,"total":0,"total_registered":0,"truncated":0},"secondmate_guidance":{"note":"For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."},"secondmate_landed":{"partial":[],"records":[],"truncated":[],"unreadable":[]},"tasks":[{"actions":{"return_channel_note":null,"steer":"bin/fm-send.sh fm-job '<instruction>'","watch":"bin/fm-peek.sh fm-job"},"backend":"tmux","backlog":null,"branch":"fm/batch","current_state":{"detail":"no backend target recorded","freshness":"fresh","observed_at":"2026-10-03T17:56:05Z","raw":"state: unknown \u00b7 source: none \u00b7 no backend target recorded","source":"none","state":"unknown"},"endpoint":{"agent_alive":"not_checked","exists":null,"freshness":"fresh","observed_at":"2026-10-03T17:56:05Z","status":"unknown","target":null},"harness":"codex","hints":{"blocked_event":false,"last_event_text":"","open_decisions":[],"pending_decision":false,"scout_report_present":false},"id":"job","kind":"ship","mode":"direct-PR","paths":{"home":{"path":null,"present":false},"meta":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/job.meta","present":true},"report":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/data/job/report.md","present":false},"status_log":{"kind":"event_history","last_event":{"age_seconds":null,"note":"","raw":"","state":""},"path":"/tmp/workforce-source/.workforce-live-bktmuvac/state/job.status","present":false},"worktree":{"path":"/tmp/workforce-source/.workforce-live-bktmuvac/projects/demo","present":true}},"pr":{"head":null,"source":"absent","url":null},"project":"/tmp/workforce-source/.workforce-live-bktmuvac/projects/demo","remote":null,"secondmate_projects":[],"spawn_gen":"gen-1","yolo":"off"}]},"model_catalogs":[{"harness":"claude","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"codex","models":[],"provenance":"codex models_cache.json","reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"opencode","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"pi","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"pi-signed","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"grok","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"kimi","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"cursor","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"gemini","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"muse","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"rovo","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"omp","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"agy","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"},{"harness":"devin","models":[],"provenance":null,"reason":"no supported authoritative catalog reader; model selection unavailable"}],"preferences":{"application":"requested defaults are not effective until supervisor-owned intake applies them","global":{"dispatch_default":{"configuration_valid":false,"reason":"error: malformed rules file: /dev/stdin - each default profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present","source":"config/crew-dispatch.json","value":null},"harness":{"source":"config/crew-harness","value":"codex"},"posture":{"source":"not registered by Firstmate","value":null}},"jobs":[{"backend":"tmux","delivery_mode":"direct-PR","effort":null,"generation":"gen-1","harness":"codex","job":"job","merge_autonomy":"off","model":null,"profile_observation":"same-generation","project":"demo","source":"recorded task metadata; unaffected by prospective defaults"}],"new_worker":"snapshot is an observation, not a dispatch grant; supervisor resolves rules at intake","precedence":["global","project","explicit-job"],"projects":[{"branch_prefix":"fm/","delivery":"direct-PR off","forge":"none","project":"demo","source":"fm-project-mode.sh","worker_preferences":"inherit global; task-specific supervisor dispatch rules may override"}],"revision":"71d6d50de9788c712878a34a92b0adfae57a0be5fdc7a32d13575d1f317f3771"},"projects":[{"branch_prefix":"fm/","effective":"direct-PR off","forge":"none","project":"demo","provenance":"fm-project-mode.sh","registered":"direct-PR off"}],"provenance":["fm-fleet-snapshot.sh","fm-inbox.sh ready","fm-control-lib.sh","fm-backend.sh"],"readiness":{"can_receive":false,"home":"workforce-source/.workforce-live-bktmuvac","lock":{"live_harness":false,"pid":null,"state":"free"},"observed_at":"2026-10-03T17:56:05Z","posture":{"state":"present"},"schema":"fm-primary-ready.v1","wake_consumer":{"beacon_age_seconds":null,"reason":"supervision-model-unknown-for-home","state":"unknown"}},"schema":"fm-workforce-status.v1","unsupported":["direct-execution","teardown","merge","check-waiver","credentials","remote-provisioning","public-relay-enable"],"windows":[{"backend":"tmux","generation":"gen-1","job":"job","project":"demo","verbs":{"exit":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"focus":{"direct_execution":false,"reason":"unsupported window request: no portable guarded focus/open owner","request_supported":false},"interrupt":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"open":{"direct_execution":false,"reason":"unsupported window request: no portable guarded focus/open owner","request_supported":false},"relaunch":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true},"send-instruction":{"direct_execution":false,"reason":"request scope and window capability verified; guarded owner retains execution checks","request_supported":true}}}]}
+
+$ git -C /tmp/workforce-source/.workforce-live-bktmuvac/projects/demo remote
+exit: 0
+
+
+Verified: approved replies did not execute lifecycle, modify metadata/project policy, create backlog, or publish Git remotes.
+Disposable lab removed: /tmp/workforce-source/.workforce-live-bktmuvac
+CLI integration exit: 0
+Graphical guest integration completed; see recorded exit codes.

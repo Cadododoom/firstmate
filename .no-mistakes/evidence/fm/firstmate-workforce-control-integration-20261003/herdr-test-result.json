@@ -1,0 +1,17 @@
+{
+  "finding": "test-1",
+  "result": "pass",
+  "tested_head_sha": "70da969a01cef42325d881b6d4aa3f37aa35f28c",
+  "source_changes": false,
+  "session": "fm-lab-firstmate-workfo-1899984-16269",
+  "scenario": "helper-owned named Herdr lab; typed window requests/replies; unchanged default tripwire",
+  "cleanup": "helper teardown exit 0; named session absent; default tripwire unchanged; synthetic homes removed; worktree clean",
+  "log": "/home/cadodolap_works/.no-mistakes/evidence/01M41CD8B6K3EEA20MPMVZMWPB/herdr-authorized-route.log",
+  "preserved_evidence": [
+    "workforce-cli-current.log",
+    "guest-final-results.png",
+    "guest-launch.json",
+    "guest-exit.json"
+  ],
+  "scope": "Assigned Test finding only; outer executor owns pipeline outcome"
+}

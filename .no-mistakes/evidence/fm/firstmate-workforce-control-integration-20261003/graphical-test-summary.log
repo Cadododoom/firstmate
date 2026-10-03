@@ -1,0 +1,15 @@
+Head: 70da969a01cef42325d881b6d4aa3f37aa35f28c
+Visible GTK NixOS 26.05 / KDE guest: 1 vCPU, 4096 MiB, KVM. Launch PID 1586595.
+Ownership paths and full argv: guest-launch.json. Private runtime, disk, QMP, node and exchange under this run evidence g/.
+Supplied ISO verified against SHA256 fb33e4e2befbb60f4c9b8ba6ab6c59862fd9fe2696bfb4d4d11990c7e9de5d1f.
+Committed source archive verified inside guest; archive/head binding in guest-source.json.
+No host home, credential or browser mounts. No networking, USB, lifecycle execution, grants, source changes, or pipeline control.
+No build invoked; guest NIX_CONFIG max-jobs=1 cores=2 recorded in guest-run.sh.
+Workforce focused subject passed. Inbox initially failed because Perl was missing, then passed the only focused rerun after existing closure import.
+Six real CLI integration scenarios passed in the visible guest; guest-integration.log retains request/reply JSON.
+Herdr helper name: fm-lab-workforce-test-1625-16984. prepare exited 1: fleet-state tripwire requires exactly one running default session.
+No Herdr lab provision or lifecycle was executed after that refusal. No default-fleet tripwire proof was available. This portion remains untested.
+Verdict: INCONCLUSIVE; no incomplete Test approval. Outer executor owns the next gate.
+Guest shutdown: sudo poweroff typed through guest Konsole. PID absent, QMP socket and pidfile removed; bounded exit/released-resource proof guest-exit.json. No forced termination.
+Transient disk, closures, source archive, runtime/node/exchange were removed after shutdown. Original six-scenario CLI evidence preserved.
+Graphical slot and 1 vCPU / 4 GiB allocation released.
