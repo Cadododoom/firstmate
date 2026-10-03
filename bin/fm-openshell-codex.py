@@ -309,10 +309,18 @@ def same_content(left, right):
     if left.get("kind") != right.get("kind"):
         return False
     if left.get("kind") == "file":
-        return left.get("sha256") == right.get("sha256")
+        return left.get("sha256") == right.get("sha256") and left.get("mode") == right.get("mode")
     if left.get("kind") == "symlink":
         return left.get("target") == right.get("target")
     return left.get("kind") == "missing"
+
+
+def installed_mode(source_mode, baseline_state=None):
+    if baseline_state and baseline_state.get("kind") == "file":
+        mode = baseline_state.get("mode", 0o644) & 0o666
+    else:
+        mode = source_mode & 0o666
+    return mode | (source_mode & 0o111)
 
 
 def snapshot(root, paths):
@@ -396,11 +404,7 @@ def copy_path(source_root, dest_root, rel, baseline=None):
             shutil.copyfileobj(input_file, output)
             output.flush()
             os.fsync(output.fileno())
-        if baseline and baseline.get(rel, {}).get("kind") == "file":
-            mode = baseline[rel].get("mode", 0o644) & 0o666
-        else:
-            mode = stat.S_IMODE(info.st_mode) & 0o666
-        mode |= stat.S_IMODE(info.st_mode) & 0o111
+        mode = installed_mode(stat.S_IMODE(info.st_mode), baseline.get(rel) if baseline else None)
         os.chmod(tmp_name, mode)
         os.replace(tmp_name, str(target))
     finally:
@@ -776,13 +780,13 @@ def download_workspace(ctx, journal):
                 fail("host validation handoff requires committed tracked changes and a clean sandbox worktree")
         candidate = download_root / "workspace"
         candidate.mkdir(mode=0o700)
-        openshell_run(ctx, "sandbox", "download", ctx["sandbox"], WORKSPACE_IN_SANDBOX + "/.git", str(candidate))
+        openshell_run(ctx, "sandbox", "download", ctx["sandbox"], WORKSPACE_IN_SANDBOX + "/.git", str(candidate / ".git"))
         _, _, paths, _ = verify_stage({**ctx, "stage": candidate}, journal)
-        remote_archive = "/tmp/fm-openshell-" + secrets.token_hex(16) + ".tar"
+        remote_archive = WORKSPACE_IN_SANDBOX + "/.git/.fm-openshell-snapshot-" + secrets.token_hex(16) + ".tar"
         packing = (
             "import json,os,stat,sys,tarfile\n"
             "root=sys.argv[1]\n"
-            "with tarfile.open(sys.argv[2], 'w') as archive:\n"
+            "with open(sys.argv[2], 'xb') as output, tarfile.open(fileobj=output, mode='w') as archive:\n"
             " for rel in json.load(sys.stdin):\n"
             "  current=root\n"
             "  for part in rel.split('/')[:-1]:\n"
@@ -802,6 +806,9 @@ def download_workspace(ctx, journal):
                       "--", "python3", "-c", packing, WORKSPACE_IN_SANDBOX, remote_archive,
                       input_bytes=json.dumps(paths, ensure_ascii=True).encode("ascii"))
         openshell_run(ctx, "sandbox", "download", ctx["sandbox"], remote_archive, str(download_root))
+        openshell_run(ctx, "sandbox", "exec", "--name", ctx["sandbox"],
+                      "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--no-tty",
+                      "--", "python3", "-c", "import os,sys;os.unlink(sys.argv[1])", remote_archive)
         archive_path = download_root / Path(remote_archive).name
         if archive_path.is_symlink() or not archive_path.is_file():
             fail("OpenShell snapshot archive is missing or unsafe")
@@ -1072,7 +1079,7 @@ def ensure_no_global_policy(ctx):
 
 
 def upload_file(ctx, source, destination):
-    openshell_run(ctx, "sandbox", "upload", "--no-git-ignore", ctx["sandbox"], str(source), destination)
+    openshell_run(ctx, "sandbox", "upload", "--no-git-ignore", ctx["sandbox"], str(source), destination.rstrip("/") + "/")
 
 
 def upload_files(ctx, source_dir, destination_dir):
@@ -1406,6 +1413,8 @@ def restore_host(ctx, journal, backup, final_head=None):
         actual = current_states[path]
         baseline_state = journal["base_files"].get(path, {"kind": "missing"})
         expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
+        if expected.get("kind") == "file":
+            expected = {**expected, "mode": installed_mode(expected["mode"], baseline_state)}
         if not same_content(actual, baseline_state) and not same_content(actual, expected):
             fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
     if final_head and final_head != journal["base_head"]:

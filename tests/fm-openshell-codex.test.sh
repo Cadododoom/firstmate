@@ -26,20 +26,33 @@ with tempfile.TemporaryDirectory(dir=root / "tests", prefix="openshell-test-") a
     log = base / "commands.jsonl"
     identity = base / "identity"
     identity.write_text("workspace-original")
+    remote_root = base / "sandbox"
+    (remote_root / ".git" / "fm-openshell" / "channel" / "inbox").mkdir(parents=True)
+    (remote_root / ".git" / "fm-openshell" / "channel" / "responses").mkdir()
     fake.write_text('''#!/usr/bin/env python3
-import json, os, pathlib, sys
+import json, os, pathlib, shutil, sys
 args = sys.argv[1:]
 with open(os.environ["COMMAND_LOG"], "a") as f:
     f.write(json.dumps(args) + "\\n")
-if "sandbox" in args and "upload" in args and pathlib.Path(args[-2]).name == "launch-brief.txt":
-    pathlib.Path(os.environ["BRIEF_LOG"]).write_bytes(pathlib.Path(args[-2]).read_bytes())
+if "sandbox" in args and "upload" in args and "--no-git-ignore" in args:
+    source = pathlib.Path(args[-2])
+    destination = pathlib.PurePosixPath(args[-1])
+    if args[-1].endswith("/") or destination.parent == pathlib.PurePosixPath("/"):
+        destination = destination / source.name
+    target = pathlib.Path(os.environ["REMOTE_ROOT"]) / destination.relative_to("/sandbox")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.is_dir():
+        sys.exit("cannot extract a file over a directory")
+    shutil.copy2(source, target)
+    if source.name == "launch-brief.txt":
+        pathlib.Path(os.environ["BRIEF_LOG"]).write_bytes(target.read_bytes())
 workspace = args[args.index("--workspace") + 1] if "--workspace" in args else os.environ.get("OPENSHELL_WORKSPACE", "default")
 if "workspace" in args and "get" in args:
     print("Workspace:\\n\\n  Name: " + workspace + "\\n  Id: " + pathlib.Path(os.environ["WORKSPACE_ID_FILE"]).read_text())
 ''')
     fake.chmod(0o755)
     env = dict(os.environ, PATH=str(base) + os.pathsep + os.environ["PATH"],
-               COMMAND_LOG=str(log), BRIEF_LOG=str(base / "brief-delivered"), WORKSPACE_ID_FILE=str(identity), OPENSHELL_WORKSPACE="other",
+               COMMAND_LOG=str(log), REMOTE_ROOT=str(remote_root), BRIEF_LOG=str(base / "brief-delivered"), WORKSPACE_ID_FILE=str(identity), OPENSHELL_WORKSPACE="other",
                SSH_AUTH_SOCK=str(base / "host-agent.sock"), GIT_SSH_COMMAND="host-ssh-command",
                GIT_CONFIG_GLOBAL=str(base / "host-gitconfig"))
     ctx = dict(id="task", home=base, state=base, gateway="local", workspace="team",
@@ -92,12 +105,24 @@ if "workspace" in args and "get" in args:
             assert "--dangerously-bypass-approvals-and-sandbox" in codex
             assert codex[-1] == "Read the brief at /sandbox/.git/fm-openshell/launch-brief.txt and follow it exactly."
             upload = [command for command in commands() if "upload" in command][-1]
-            assert upload[-1] == "/sandbox/.git/fm-openshell"
+            assert upload[-1] == "/sandbox/.git/fm-openshell/"
+            assert (remote_root / ".git" / "fm-openshell" / "launch-brief.txt").read_bytes() == prompt.encode("utf-8")
             assert "CODEX_HOME=/tmp/fm-codex-home" in args
             forwarded = dict(args[i + 1].split("=", 1) for i, arg in enumerate(args) if arg == "--env")
             assert "SSH_AUTH_SOCK" not in forwarded
             assert "GIT_SSH_COMMAND" not in forwarded
             assert forwarded["GIT_CONFIG_GLOBAL"] == "/dev/null"
+        for leaf, destination in [("0001.msg", "/sandbox/.git/fm-openshell/channel/inbox"),
+                                  ("response.json", "/sandbox/.git/fm-openshell/channel/responses/")]:
+            source = base / ("source-" + leaf)
+            source.mkdir()
+            (source / leaf).write_text("task channel payload")
+            runner.upload_files(ctx, source, destination)
+            assert (remote_root / destination.removeprefix("/sandbox/") / leaf).read_text() == "task channel payload"
+        archive_source = base / "workspace.tar"
+        archive_source.write_bytes(b"archive payload")
+        runner.upload_file(ctx, archive_source, "/sandbox")
+        assert (remote_root / "workspace.tar").read_bytes() == b"archive payload"
         for options, expected in [([], ("gpt-6.1-sol", "medium")),
                                   (["--model", "custom", "--effort", "high"], ("custom", "high"))]:
             with patch.object(sys, "argv", ["runner", "run", "task", "brief", *options]), patch.object(runner, "run_task", return_value=0) as launch:
@@ -135,11 +160,18 @@ elif 'sandbox' in args and 'get' in args:
 elif 'sandbox' in args and 'download' in args:
     remote = pathlib.Path(os.environ['DOWNLOAD_SOURCE'])
     source = args[-2]
+    try:
+        relative = pathlib.PurePosixPath(source).relative_to('/sandbox')
+        if '..' in relative.parts:
+            raise ValueError('noncanonical source')
+        (remote / relative).resolve().relative_to(remote.resolve())
+    except ValueError:
+        sys.exit('download source is outside sandbox workspace')
     if source == '/sandbox/.git':
-        shutil.copytree(remote / '.git', pathlib.Path(args[-1]) / '.git', symlinks=True)
+        shutil.copytree(remote / '.git', pathlib.Path(args[-1]), symlinks=True)
         transferred = ['.git/' + str(p.relative_to(remote / '.git')) for p in (remote / '.git').rglob('*') if p.is_file()]
     else:
-        source_file = remote.parent / pathlib.Path(source).name
+        source_file = remote / relative
         shutil.copy2(source_file, pathlib.Path(args[-1]) / source_file.name)
         import tarfile
         with tarfile.open(source_file) as archive:
@@ -151,7 +183,11 @@ elif '--' in args and args[args.index('--') + 1] == 'python3':
     if len(command) == 5:
         remote = pathlib.Path(os.environ['DOWNLOAD_SOURCE'])
         command[3] = str(remote)
-        command[4] = str(remote.parent / pathlib.Path(command[4]).name)
+        command[4] = str(remote / pathlib.PurePosixPath(command[4]).relative_to('/sandbox'))
+        subprocess.run(command, check=True)
+    elif len(command) == 4:
+        remote = pathlib.Path(os.environ['DOWNLOAD_SOURCE'])
+        command[3] = str(remote / pathlib.PurePosixPath(command[3]).relative_to('/sandbox'))
         subprocess.run(command, check=True)
 elif '--' in args and args[args.index('--') + 1] == 'git':
     command = args[args.index('--') + 1:]
@@ -216,6 +252,67 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
         runner.git(ctx["stage"], "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "change private file")
         runner.sync_workspace(ctx, journal)
         assert (ctx["worktree"] / "payload").stat().st_mode & 0o777 == 0o600
+        for original_mode, concurrent_mode in [(0o644, 0o600), (0o755, 0o700), (0o600, 0o400)]:
+            ctx, journal = make_repo("concurrent-mode-" + oct(original_mode))
+            wt, stage = ctx["worktree"], ctx["stage"]
+            (wt / "payload").chmod(original_mode)
+            journal["base_files"] = runner.snapshot(wt, journal["base_paths"])
+            (stage / "payload").write_text("incoming payload")
+            original_apply = runner.apply_files
+            def concurrent_chmod(source, dest, *args):
+                if source == stage:
+                    (wt / "payload").chmod(concurrent_mode)
+                return original_apply(source, dest, *args)
+            with patch.object(runner, "apply_files", concurrent_chmod):
+                refuses(lambda: runner.sync_workspace(ctx, journal))
+            assert (wt / "payload").read_text() == "original payload"
+            assert (wt / "payload").stat().st_mode & 0o7777 == concurrent_mode
+            assert journal["phase"] == "syncing"
+        ctx, journal = make_repo("rollback-concurrent-mode")
+        wt, stage = ctx["worktree"], ctx["stage"]
+        (wt / "payload").chmod(0o644)
+        journal["base_files"] = runner.snapshot(wt, journal["base_paths"])
+        (stage / "payload").write_text("incoming payload")
+        original_copy = runner.copy_path
+        def chmod_after_copy(source, dest, rel, baseline=None):
+            original_copy(source, dest, rel, baseline)
+            if source == stage and rel == "payload":
+                (dest / rel).chmod(0o600)
+                raise runner.Refusal("injected concurrent chmod before rollback")
+        with patch.object(runner, "copy_path", chmod_after_copy):
+            refuses(lambda: runner.sync_workspace(ctx, journal))
+        assert (wt / "payload").read_text() == "incoming payload"
+        assert (wt / "payload").stat().st_mode & 0o7777 == 0o600
+        assert journal["phase"] == "syncing"
+        with patch.object(runner, "load_context", return_value=ctx), patch.object(runner, "endpoint_agent_free"):
+            refuses(lambda: runner.recover_task("task"))
+        assert (wt / "payload").stat().st_mode & 0o7777 == 0o600
+        for new_file in [False, True]:
+            ctx, journal = make_repo("rollback-installed-mode-" + str(new_file))
+            wt, stage = ctx["worktree"], ctx["stage"]
+            leaf = "new-file" if new_file else "payload"
+            if not new_file:
+                (wt / leaf).chmod(0o600)
+                journal["base_files"] = runner.snapshot(wt, journal["base_paths"])
+            (stage / leaf).write_text("incoming payload")
+            (stage / leaf).chmod(0o4700 if new_file else 0o666)
+            runner.git(stage, "add", leaf)
+            original_copy = runner.copy_path
+            def fail_installed_copy(source, dest, rel, baseline=None):
+                original_copy(source, dest, rel, baseline)
+                if source == stage and rel == leaf:
+                    assert (dest / rel).stat().st_mode & 0o7777 == (0o700 if new_file else 0o600)
+                    raise runner.Refusal("injected failure after normalized mode copy")
+            with patch.object(runner, "copy_path", fail_installed_copy):
+                refuses(lambda: runner.sync_workspace(ctx, journal))
+            assert journal["phase"] == "snapshot-downloaded"
+            if new_file:
+                assert not (wt / leaf).exists()
+            else:
+                assert (wt / leaf).read_text() == "original payload"
+                assert (wt / leaf).stat().st_mode & 0o7777 == 0o600
+            runner.sync_workspace(ctx, journal)
+            assert (wt / leaf).stat().st_mode & 0o7777 == (0o700 if new_file else 0o600)
         for failure in ["clone", "copy", "hooks", "inbox"]:
             ctx, journal = make_repo("prepare-failure-" + failure)
             shutil.rmtree(ctx["stage_root"])
@@ -540,7 +637,11 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
         runner.git(remote, "add", "sandbox-link")
         download_log = ctx["home"] / "download-log.jsonl"
         with patch.dict(os.environ, DOWNLOAD_SOURCE=str(remote), DOWNLOAD_LOG=str(download_log)):
+            refuses(lambda: runner.openshell_run(ctx, "sandbox", "download", ctx["sandbox"], "/tmp/outside.tar", str(ctx["stage_root"])))
             runner.download_workspace(ctx, journal)
+        assert (ctx["stage"] / ".git" / "HEAD").is_file()
+        assert not (ctx["stage"] / "HEAD").exists()
+        assert not list((remote / ".git").glob(".fm-openshell-snapshot-*.tar"))
         transported = {path for line in download_log.read_text().splitlines() for path in json.loads(line)}
         assert not {"sandbox-untracked", "ignored"} & transported
         assert not (ctx["stage"] / "sandbox-untracked").exists()
