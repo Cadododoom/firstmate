@@ -161,6 +161,60 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
         runner.write_journal(ctx, journal)
         return ctx, journal
     with patch.dict(os.environ, env):
+        for mode in [0o600, 0o400, 0o700, 0o500, 0o644, 0o755, 0o4700]:
+            ctx, journal = make_repo("new-mode-" + oct(mode))
+            private = ctx["stage"] / "new-file"
+            private.write_text("sandbox-created content")
+            private.chmod(mode)
+            runner.git(ctx["stage"], "add", "new-file")
+            runner.git(ctx["stage"], "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "new file")
+            runner.sync_workspace(ctx, journal)
+            assert (ctx["worktree"] / "new-file").stat().st_mode & 0o7777 == mode & 0o777
+        ctx, journal = make_repo("existing-private-mode")
+        (ctx["worktree"] / "payload").chmod(0o600)
+        journal["base_files"] = runner.snapshot(ctx["worktree"], journal["base_paths"])
+        runner.write_journal(ctx, journal)
+        (ctx["stage"] / "payload").write_text("changed private content")
+        (ctx["stage"] / "payload").chmod(0o666)
+        runner.git(ctx["stage"], "add", "payload")
+        runner.git(ctx["stage"], "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "change private file")
+        runner.sync_workspace(ctx, journal)
+        assert (ctx["worktree"] / "payload").stat().st_mode & 0o777 == 0o600
+        for failure in ["clone", "copy", "hooks", "inbox"]:
+            ctx, journal = make_repo("prepare-failure-" + failure)
+            shutil.rmtree(ctx["stage_root"])
+            ctx["journal"].unlink()
+            ctx["responses"] = ctx["bridge_dir"] / "responses"
+            ctx["channel"] = ctx["bridge_dir"] / "inbox"
+            (ctx["state"] / "task.inbox").mkdir()
+            original_run = runner.run
+            def refuse_clone(argv, **kwargs):
+                if argv[:2] == ["git", "clone"]:
+                    raise runner.Refusal("injected clone failure")
+                return original_run(argv, **kwargs)
+            def refuse_preparation(*args, **kwargs):
+                raise runner.Refusal("injected preparation failure")
+            target, replacement = {
+                "clone": ("run", refuse_clone), "copy": ("copy_path", refuse_preparation),
+                "hooks": ("copy_project_hooks", refuse_preparation),
+                "inbox": ("refresh_inbox_mirror", refuse_preparation),
+            }[failure]
+            with patch.object(runner, target, replacement):
+                refuses(lambda: runner.prepare_workspace(ctx))
+            assert runner.read_journal(ctx)["phase"] == "preparing"
+            assert runner.git(ctx["worktree"], "rev-parse", "HEAD") == journal["base_head"]
+            assert runner.snapshot(ctx["worktree"], journal["base_paths"]) == journal["base_files"]
+            with patch.object(runner, "load_context", return_value=ctx), patch.object(runner, "endpoint_agent_free"):
+                with patch.object(runner, "sandbox_get", return_value=True), patch.object(runner, "delete_sandbox") as deletion:
+                    refuses(lambda: runner.recover_task("task"))
+                    deletion.assert_not_called()
+                assert runner.read_journal(ctx)["phase"] == "preparing"
+                runner.recover_task("task")
+            assert not ctx["stage_root"].exists() and not ctx["journal"].exists()
+            assert not ctx["bridge_dir"].exists()
+            prepared = runner.prepare_workspace(ctx)
+            assert prepared["phase"] == "prepared"
+            assert runner.git(ctx["stage"], "write-tree") == journal["base_index_tree"]
         for directory in [False, True]:
             ctx, journal = make_repo("backup-" + str(directory), directory)
             backup = runner.backup_host(ctx, journal)

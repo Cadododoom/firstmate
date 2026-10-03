@@ -401,7 +401,7 @@ def copy_path(source_root, dest_root, rel, baseline=None):
         if baseline and baseline.get(rel, {}).get("kind") == "file":
             mode = baseline[rel].get("mode", 0o644) & 0o666
         else:
-            mode = 0o644
+            mode = stat.S_IMODE(info.st_mode) & 0o666
         mode |= stat.S_IMODE(info.st_mode) & 0o111
         os.chmod(tmp_name, mode)
         os.replace(tmp_name, str(target))
@@ -519,6 +519,20 @@ def prepare_workspace(ctx):
     for path in (ctx["stage_root"], ctx["journal"], ctx["bridge_dir"], ctx["policy"]):
         if path.exists() or path.is_symlink():
             fail("OpenShell task staging already exists; recover it before relaunching")
+    journal = {
+        "phase": "preparing",
+        "base_head": base,
+        "base_index_tree": index_tree,
+        "base_paths": paths,
+        "base_files": states,
+        "origin": origin,
+        "object_format": object_format,
+        "project_hooks": False,
+        "keep_ai_trailers": ctx["values"].get("openshell_keep_ai_trailers", "0"),
+        "user_name": git_identity(wt, "user.name"),
+        "user_email": git_identity(wt, "user.email"),
+    }
+    write_journal(ctx, journal)
     ctx["stage_root"].mkdir(mode=0o700, parents=True)
     ctx["stage"].mkdir(mode=0o777)
     os.chmod(str(ctx["stage"]), 0o777)
@@ -582,19 +596,8 @@ def prepare_workspace(ctx):
                 continue
             mode = stat.S_IMODE(path.stat().st_mode)
             os.chmod(str(path), 0o666 | (mode & 0o111))
-    journal = {
-        "phase": "prepared",
-        "base_head": base,
-        "base_index_tree": index_tree,
-        "base_paths": paths,
-        "base_files": states,
-        "origin": origin,
-        "object_format": object_format,
-        "project_hooks": project_hooks,
-        "keep_ai_trailers": ctx["values"].get("openshell_keep_ai_trailers", "0"),
-        "user_name": git_identity(wt, "user.name"),
-        "user_email": git_identity(wt, "user.email"),
-    }
+    journal["phase"] = "prepared"
+    journal["project_hooks"] = project_hooks
     write_journal(ctx, journal)
     return journal
 
@@ -1572,9 +1575,9 @@ def recover_task(task_id):
     phase = journal.get("phase")
     if phase != "synced":
         ctx = load_context(task_id)
-    if phase == "prepared" and exists:
+    if phase in ("preparing", "prepared") and exists:
         fail("an OpenShell sandbox exists before its ownership was recorded; preserve it for manual inspection")
-    if phase in ("prepared", "sandbox-created", "workspace-uploaded"):
+    if phase in ("preparing", "prepared", "sandbox-created", "workspace-uploaded"):
         if exists:
             delete_sandbox(ctx)
         journal["phase"] = "synced"
