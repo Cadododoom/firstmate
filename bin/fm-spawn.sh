@@ -2450,11 +2450,11 @@ opensh_read_config() {
       *) echo "error: unknown OpenShell opt-in setting in $file" >&2; return 1 ;;
     esac
   done <"$file"
-  [ "$found_gateway" -eq 1 ] && opensh_validate_gateway "$OPENSH_GATEWAY" &&
-    [ "$found_providers" -eq 1 ] && opensh_validate_providers "$OPENSH_PROVIDERS" || {
+  if ! { [ "$found_gateway" -eq 1 ] && opensh_validate_gateway "$OPENSH_GATEWAY" &&
+    [ "$found_providers" -eq 1 ] && opensh_validate_providers "$OPENSH_PROVIDERS"; }; then
     echo "error: $file must contain gateway=<registered-gateway-name> and one providers= list including codex (at most four registered provider names)" >&2
     return 1
-  }
+  fi
 }
 if [ "$RELAUNCH" -eq 1 ]; then
   RELAUNCH_OPENSH=$(fm_meta_get "$RELAUNCH_META" openshell)
@@ -2471,10 +2471,10 @@ if [ "$RELAUNCH" -eq 1 ]; then
       echo "error: task $ID is missing its recorded OpenShell workspace identity" >&2
       exit 1
     }
-    opensh_validate_providers "$OPENSH_PROVIDERS" && opensh_validate_gateway "$OPENSH_GATEWAY" || {
+    if ! opensh_validate_providers "$OPENSH_PROVIDERS" || ! opensh_validate_gateway "$OPENSH_GATEWAY"; then
       echo "error: task $ID has invalid recorded OpenShell settings; refusing a host Codex fallback" >&2
       exit 1
-    }
+    fi
     OPENSH_ENABLED=1
   elif [ -n "$RELAUNCH_OPENSH" ]; then
     echo "error: task $ID has an unsupported recorded OpenShell mode '$RELAUNCH_OPENSH'; refusing to fall back to host Codex" >&2
