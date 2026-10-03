@@ -36,8 +36,23 @@ def call(command, value=None, success=True):
     return json.loads(result.stdout)
 def request(rid, action, scope, payload):
     return dict(schema='fm-workforce-request.v1', request_id=rid, action=action, scope=scope, payload=payload)
-scope = dict(project='demo', job='job', batch='batch-v1', branch='fm/batch', head=head)
+scope = dict(project='demo', job='job', batch=head, branch='fm/batch', head=head, generation='gen-1')
 req = request('validate-1', 'validation-request', scope, dict(posture='assistant', delivery_mode='no-mistakes'))
+# Batch identity is Git revision evidence, not an arbitrary completion label.
+for i, batch in enumerate(['batch-v1', '0'*40]):
+    mismatched = dict(req, request_id='wrong-batch-'+str(i), scope=dict(scope, batch=batch))
+    assert 'batch does not identify' in call(['submit'], mismatched, False)['error']
+    legacy = subprocess.run(['bash', str(pathlib.Path(cli).parent/'fm-inbox.sh'), 'note', '--json', '-'],
+        input='Workforce request v1\n'+json.dumps(mismatched, separators=(',', ':'), sort_keys=True),
+        text=True, capture_output=True, env={k:v for k,v in os.environ.items() if not k.startswith('FM_') or k == 'FM_HOME'})
+    assert legacy.returncode == 0, legacy.stderr
+    legacy_id = json.loads(legacy.stdout)['id']
+    assert 'batch does not identify' in call(['answer', legacy_id],
+        dict(decision='approved', reason='wrong batch', scope=mismatched['scope']), False)['error']
+    subprocess.run(['bash', str(pathlib.Path(cli).parent/'fm-inbox.sh'), 'drain', '--ack', legacy_id],
+        check=True, capture_output=True, env={k:v for k,v in os.environ.items() if not k.startswith('FM_') or k == 'FM_HOME'})
+call(['submit'], dict(req, request_id='missing-generation', scope={k:v for k,v in scope.items() if k != 'generation'}), False)
+call(['submit'], dict(req, request_id='old-generation', scope=dict(scope, generation='gen-0')), False)
 first = call(['submit'], req)
 assert first['outcome'] == 'created' and first['announced']
 assert call(['submit'], req)['id'] == first['id']
@@ -49,6 +64,10 @@ assert 'Workforce request v1' in (home/'state/inbox'/f"{first['id']}.note").read
 wrong = dict(decision='approved', reason='reviewed', scope=dict(scope, head='0'*40))
 call(['answer', first['id']], wrong, False)
 answer = dict(decision='approved', reason='exact batch reviewed', scope=scope)
+(home/'state/job.meta').write_text(metadata.replace('spawn_gen=gen-1', 'spawn_gen=gen-2'))
+assert 'stale job generation' in call(['answer', first['id']], answer, False)['error']
+assert call(['submit'], req)['id'] == first['id']
+(home/'state/job.meta').write_text(metadata)
 call(['answer', first['id']], answer)
 receipts = call(['receipts', '--all-replies'])
 assert len(receipts['replies']) == 1
@@ -62,13 +81,17 @@ reserved = call(['submit'], interrupted)
 published = home/'state/inbox'/f"{reserved['id']}.note"
 staged = home/'state/inbox'/('.staging-' + reserved['id'].partition('-')[2])
 published.rename(staged)
+unrelated_staging = home/'state/inbox/.staging-unrelated'
+unrelated_staging.write_text('unrelated owned elsewhere')
 assert 'identity' in call(['submit'], dict(interrupted, scope=dict(scope, batch='different')), False)['error']
-assert not published.exists()
+assert not published.exists() and staged.exists()
 (worktree/'file').write_text('two'); git('add', 'file'); git('commit', '-m', 'advance')
 assert 'stale head' in call(['answer', second['id']], answer, False)['error']
 recovered = call(['submit'], interrupted)
 assert recovered['id'] == reserved['id'] and recovered['outcome'] == 'replay'
-assert published.read_text().split('\n--\n', 1)[1] == staged.read_text().split('\n--\n', 1)[1]
+assert not staged.exists()
+assert unrelated_staging.read_text() == 'unrelated owned elsewhere'
+assert json.loads(published.read_text().split('Workforce request v1\n', 1)[1]) == interrupted
 assert call(['submit'], interrupted)['id'] == reserved['id']
 assert 'identity' in call(['submit'], dict(interrupted, scope=dict(scope, batch='different')), False)['error']
 missing = dict(req, request_id='missing-staged')
@@ -78,7 +101,7 @@ assert not (home/'state/inbox/123456-missing.note').exists()
 call(['submit'], dict(req, request_id='stale'), False)
 # Identity replay remains possible after work advances, never approves new head.
 assert call(['submit'], req)['outcome'] == 'replay'
-new_scope = dict(scope, head=git('rev-parse', 'HEAD'))
+new_scope = dict(scope, head=git('rev-parse', 'HEAD'), batch=git('rev-parse', 'HEAD'))
 (home/'state/job.meta').write_text(metadata.replace('mode=direct-PR', 'mode=local-only'))
 call(['submit'], dict(req, request_id='local', scope=new_scope), False)
 (home/'state/job.meta').write_text(metadata)
@@ -212,15 +235,31 @@ for setting in ['default\n', ' \n']:
 explicit = call(['status'])['preferences']
 assert explicit['global']['harness'] == dict(value='codex', source='config/crew-harness')
 assert explicit['revision'] != inherited['revision']
+assert 'stale preference snapshot' in call(['submit'], dict(job, request_id='stale-preferences'), False)['error']
+assert 'stale preference snapshot' in call(['answer', new_worker_note['id']],
+    dict(decision='approved', reason='old defaults', scope=job['scope']), False)['error']
+assert call(['submit'], job)['id'] == new_worker_note['id']
+current_job = dict(job, request_id='current-preferences', payload=dict(job['payload'], preference_revision=explicit['revision']))
+current_note = call(['submit'], current_job)
+call(['answer', current_note['id']], dict(decision='approved', reason='current defaults', scope=job['scope']))
 (home/'config/crew-harness').unlink()
 dispatch_path = home/'config/crew-dispatch.json'
-valid_profile = dict(harness='codex', model='catalog-model', effort='high')
+valid_profile = dict(harness='codex', model='catalog-model', effort='high', provider='openai')
 for default in [valid_profile, [valid_profile, dict(harness='claude', effort='max')]]:
     dispatch_path.write_text(json.dumps(dict(default=default)))
     snapshot = call(['status'])['preferences']
     observed = snapshot['global']['dispatch_default']
     assert observed['configuration_valid'] and observed['value'] == default
     assert snapshot['revision'] != inherited['revision']
+for default in [valid_profile, [valid_profile, dict(harness='claude', effort='max')]]:
+    dispatch_path.write_text(json.dumps(dict(default=default)))
+    before = call(['status'])['preferences']
+    changed_profile = dict(valid_profile, provider='different-provider')
+    changed_default = changed_profile if isinstance(default, dict) else [changed_profile, default[1]]
+    dispatch_path.write_text(json.dumps(dict(default=changed_default)))
+    after = call(['status'])['preferences']
+    assert after['global']['dispatch_default']['value'] == changed_default
+    assert before['revision'] != after['revision']
 invalid_configs = [
     dict(default=dict(harness='codex', model=123, effort='high')),
     dict(default=dict(harness='codex', model='')),

@@ -40,7 +40,9 @@ HELP = '''Request object (unknown keys refused):
   action: validation-request|job-request|policy-request|window-request|defaults-request,
   scope: {project: registered-alias, job?: exact-task-id, batch?: revision-id,
           branch?: git-branch, head?: full-object-id, generation?: spawn_gen, level?: defaults-level}, payload: {...}}
-Validation scope requires all five fields; payload is
+Validation scope requires project, job, batch, branch, head and generation;
+batch is the full Git commit ID of the completed revision and must equal head.
+Payload is
  {posture: "assistant", delivery_mode: "no-mistakes"}.
 Job payload optionally adds preferences (same fixed defaults fields) and
 preference_revision (64 lowercase hex digits from the observed status snapshot).
@@ -60,7 +62,7 @@ inherited sources and an observation revision, never mutates running rows.
 Answers: {decision: approved|declined|refused, reason: text, scope: exact scope}.
 Replies bind schema fm-workforce-answer.v1, request_id, scope, provenance and
 observed_at. Acknowledgement is not approval. Approval is not execution or yolo.
-Validation approval rechecks the recorded worktree branch/current HEAD; row approvals recheck generation.
+Validation approval rechecks batch/HEAD, clean branch and worker generation; row approvals recheck generation.
 Execution must revalidate scope through ordinary supervisor intake and its existing guarded owners.
 Request IDs are at most 118 characters; replay requires identical canonical content, including scope/revision.
 Capture exits 3 if saved but not announced: retry identical request to repair.
@@ -197,6 +199,8 @@ def exact_head(home, scope):
         fail('stale branch scope')
     if git('rev-parse', 'HEAD') != scope['head']:
         fail('stale head scope')
+    if scope['batch'] != scope['head'] or git('rev-parse', scope['batch'] + '^{commit}') != scope['head']:
+        fail('batch does not identify the requested revision')
     if git('status', '--porcelain'):
         fail('completed batch has uncommitted changes')
 
@@ -298,7 +302,7 @@ def validate(home, env, request, current=True):
         if current and scope['level'] == 'job':
             meta(home, scope)
     elif action == 'validation-request':
-        keys(scope, {'project', 'job', 'batch', 'branch', 'head'})
+        keys(scope, {'project', 'job', 'batch', 'branch', 'head', 'generation'})
         keys(payload, {'posture', 'delivery_mode'})
         if payload != {'posture': 'assistant', 'delivery_mode': 'no-mistakes'}:
             fail('validation is an Assistant no-mistakes request')
@@ -320,6 +324,8 @@ def validate(home, env, request, current=True):
             if not isinstance(payload['preference_revision'], str) or not re.fullmatch(r'[0-9a-f]{64}', payload['preference_revision']):
                 fail('invalid preference snapshot revision')
             validate_preferences(env, payload['preferences'], current)
+            if current and payload['preference_revision'] != status_snapshot(home, env)['preferences']['revision']:
+                fail('stale preference snapshot revision')
         if payload['posture'] not in {'assistant', 'autonomy'} or payload['delivery_mode'] not in MODES:
             fail('unsupported posture or delivery mode')
         if type(payload['merge_autonomy']) is not bool:
@@ -380,6 +386,7 @@ def submit(home, env):
     with capture_lock(home):
         reservation = home / 'state/inbox/.requests' / rid
         replay = False
+        recovered_staging = None
         if reservation.exists():
             note_id = reservation.read_text().strip()
             try:
@@ -393,6 +400,7 @@ def submit(home, env):
                 header = path.read_text().split('\n--\n', 1)[0].splitlines()
                 if 'id=' + note_id not in header or 'request_id=' + rid not in header:
                     fail('incomplete inbox reservation; staged identity differs')
+                recovered_staging = path
             if note_body(path) != body:
                 fail('request identity reused with different content')
             replay = True
@@ -400,6 +408,9 @@ def submit(home, env):
         if not replay:
             validate(home, env, request)
         result = run(env, 'fm-inbox.sh', 'note', '--request-id', rid, '--json', '-', body=body)
+        if recovered_staging is not None and result.returncode in {0, 3}:
+            if note_body(saved_note(home, note_id)) == body:
+                recovered_staging.unlink()
         sys.stdout.write(result.stdout)
         sys.stderr.write(result.stderr)
         return result.returncode
@@ -482,7 +493,7 @@ def profile_projection(profile):
     if isinstance(profile, list):
         return [profile_projection(row) for row in profile]
     return {key: value for key, value in profile.items()
-            if key in {'harness', 'model', 'effort'}}
+            if key in {'harness', 'model', 'effort', 'provider'}}
 
 
 def preference_snapshot(home, env, policies, fleet):
@@ -539,7 +550,7 @@ def preference_snapshot(home, env, policies, fleet):
     return snapshot
 
 
-def status(home, env):
+def status_snapshot(home, env):
     fleet = json.loads(output(env, 'fm-fleet-snapshot.sh', '--json'))
     policies = []
     for project in projects(home):
@@ -566,7 +577,7 @@ def status(home, env):
                 supported, reason = False, str(error)
             verbs[verb] = {'request_supported': supported, 'direct_execution': False, 'reason': reason}
         windows.append(dict(scope, backend=task['backend'], verbs=verbs))
-    emit({'schema': 'fm-workforce-status.v1', 'fleet': fleet,
+    return {'schema': 'fm-workforce-status.v1', 'fleet': fleet,
           'readiness': json.loads(output(env, 'fm-inbox.sh', 'ready')),
           'projects': policies, 'windows': windows,
           'backends': backend_projection(home, env),
@@ -575,7 +586,7 @@ def status(home, env):
               'workforce', str(BIN / 'fm-control-lib.sh')], text=True, env=env).splitlines()],
           'provenance': ['fm-fleet-snapshot.sh', 'fm-inbox.sh ready', 'fm-control-lib.sh', 'fm-backend.sh'],
           'unsupported': ['direct-execution', 'teardown', 'merge', 'check-waiver',
-                          'credentials', 'remote-provisioning', 'public-relay-enable']})
+                          'credentials', 'remote-provisioning', 'public-relay-enable']}
 
 
 def main():
@@ -589,7 +600,7 @@ def main():
     if command == 'answer' and len(sys.argv) == 3:
         return answer(home, env, sys.argv[2])
     if command == 'status' and len(sys.argv) == 2:
-        status(home, env)
+        emit(status_snapshot(home, env))
         return 0
     if command == 'receipts':
         result = run(env, 'fm-inbox.sh', 'receipts', *sys.argv[2:])
