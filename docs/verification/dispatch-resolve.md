@@ -128,4 +128,4 @@ $ bash tests/fm-dispatch-resolve.test.sh | tail -1
 # all fm-dispatch-resolve tests passed
 ```
 
-A live run needs a key and is not part of the suite; rerun the table above by pointing the tool at a brief with the key injected for that one command.
+A live TypeSafe run needs a key and is not part of the suite; rerun the table above by pointing the tool at a brief with the TypeSafe key injected for that one command.
