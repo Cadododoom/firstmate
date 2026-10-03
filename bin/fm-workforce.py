@@ -7,6 +7,10 @@ Usage (FM_HOME must be explicit):
   fm-workforce.py status
   fm-workforce.py answer <note-id>       JSON answer on stdin; supervisor only
 
+FM_HOME must name an existing absolute operational home. The bridge clears other
+FM_* and TASKS_AXI_FILE/BACKEND overrides for delegated owners and uses this
+script's code root; it does not support alternate project/state/config roots.
+
 This is a trusted local CLI, not an authenticated network service. Only submit,
 receipts and status are UI surfaces. answer is the supervisor's reply publisher,
 not execution or approval authority. The inbox owns all durable records/wakes.
@@ -62,6 +66,15 @@ Request IDs are at most 118 characters; replay requires identical canonical cont
 Capture exits 3 if saved but not announced: retry identical request to repair.
 Receipts retain fm-inbox-receipts.v1 cursor, omission and reply semantics.
 Status embeds fm-fleet-snapshot.v1 and fm-inbox readiness with owner provenance.
+Window request_supported verifies registered project/job/generation scope and
+the guarded owner's capability, not endpoint liveness or permission to execute.
+Unaddressable rows, including secondmate-home rows, expose no supported verbs.
+Preference status reports explicit global harness settings; absent/default
+harness inheritance is unresolved, not inferred from the client process.
+Dispatch defaults are projected only after the dispatch owner's config validation;
+invalid config exposes configuration_valid=false, a null value and a reason.
+Model catalogs are read only from the Codex cache or installed OpenCode listing;
+other harnesses expose unavailable selection rather than inferred identities.
 Unsupported focus/open, remote/experimental lifecycle, arbitrary commands,
 teardown, merges, check waivers, provisioning and credentials are refused.
 '''

@@ -6,7 +6,8 @@
 #   fm-dispatch-resolve.sh <brief-file> [--project <name>]
 #   fm-dispatch-resolve.sh --validate-config   validate JSON stdin, exit 0 or 2; no network or quota call
 #
-# Opt-in gate: TYPESAFE_API_KEY non-empty in this process environment, else a
+# Brief-resolution opt-in gate (not applied to --validate-config):
+#   TYPESAFE_API_KEY non-empty in this process environment, else a
 #   TYPESAFE_API_KEY= line in $FM_HOME/.env read with fmx_env_get, the same
 #   accessor as FMX_PAIRING_TOKEN (bin/fm-env-lib.sh). The environment wins.
 #   Absent in both: one "dispatch-resolve: off" line on stderr, nothing on
