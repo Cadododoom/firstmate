@@ -1,0 +1,38 @@
+[
+  {
+    "name": "default off",
+    "pass": true,
+    "exit": 0,
+    "dispatch_diagnostics": [],
+    "stdout": "MISSING: tmux (install: brew install tmux  # or the platform's package manager)\nPRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish\n",
+    "stderr": ""
+  },
+  {
+    "name": "explicit Laya",
+    "pass": true,
+    "exit": 0,
+    "dispatch_diagnostics": [
+      "CREW_DISPATCH: invalid config/crew-dispatch.json - approval must be \"captain\" when present"
+    ],
+    "stdout": "MISSING: tmux (install: brew install tmux  # or the platform's package manager)\nPRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish\nCREW_DISPATCH: invalid config/crew-dispatch.json - approval must be \"captain\" when present\n",
+    "stderr": ""
+  },
+  {
+    "name": "home .env Laya",
+    "pass": true,
+    "exit": 0,
+    "dispatch_diagnostics": [
+      "CREW_DISPATCH: invalid config/crew-dispatch.json - approval must be \"captain\" when present"
+    ],
+    "stdout": "MISSING: tmux (install: brew install tmux  # or the platform's package manager)\nPRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish\nCREW_DISPATCH: invalid config/crew-dispatch.json - approval must be \"captain\" when present\n",
+    "stderr": ""
+  },
+  {
+    "name": "environment TypeSafe overrides home Laya",
+    "pass": true,
+    "exit": 0,
+    "dispatch_diagnostics": [],
+    "stdout": "MISSING: tmux (install: brew install tmux  # or the platform's package manager)\nPRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish\n",
+    "stderr": ""
+  }
+]

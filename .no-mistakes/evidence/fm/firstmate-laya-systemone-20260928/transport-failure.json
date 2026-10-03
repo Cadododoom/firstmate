@@ -1,0 +1,7 @@
+{
+  "name": "Unreachable Laya returns transport error without fallback",
+  "pass": true,
+  "exit": 0,
+  "stdout": "dispatch-resolve:\n  status: error\n  reason: http 000 after 30 ms: \n",
+  "stderr": "dispatch-resolve: error (http 000 after 30 ms: )\n"
+}

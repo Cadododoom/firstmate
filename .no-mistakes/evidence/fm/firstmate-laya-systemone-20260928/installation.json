@@ -1,0 +1,9 @@
+{
+  "laya_tag": "v0.3.21",
+  "laya_commit": "9d955671415fc19f069b9cc998928075c1f255ec",
+  "checkpoint_repository": "convaiinnovations/laya",
+  "checkpoint_revision": "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851",
+  "device": "cpu",
+  "server_command": "LAYA_HOST=127.0.0.1 LAYA_PORT=18765 LAYA_DEVICE=cpu LAYA_MODELS=english LAYA_THREADS=2 LAYA_API_KEY=<disposable> .live-laya/venv/bin/laya-serve",
+  "isolation": "workspace-local dependencies, runtime libraries and HF_HOME; no operator credentials; quota CLI serves disposable schema-5 fixture; HTTP proxy forwards inference to canonical server and injects boundary failures"
+}

@@ -1,0 +1,27 @@
+{
+  "name": "Canonical Laya without API key returns concrete profile",
+  "pass": true,
+  "exit": 0,
+  "stdout": "dispatch-resolve:\n  status: clear\n  model: laya-rl-agent   latency_ms: 706   tokens: 159/0\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.007\n  probabilities: rule_1=0.5492 default=0.4508\n  note: rule matched\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'\n",
+  "stderr": "",
+  "health": {
+    "status": "ok",
+    "loaded": [
+      "english"
+    ],
+    "revisions": {
+      "english": "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851"
+    },
+    "device": "cpu",
+    "device_is_preference": false,
+    "checkpoint_devices": {
+      "english": "cpu"
+    },
+    "cpu_fallbacks": {
+      "english": {
+        "count": 0,
+        "last_reason": null
+      }
+    }
+  }
+}

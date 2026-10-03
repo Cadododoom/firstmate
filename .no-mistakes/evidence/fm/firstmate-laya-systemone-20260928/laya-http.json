@@ -1,0 +1,539 @@
+[
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "real",
+    "status": 200,
+    "response": {
+      "model": "laya-rl-agent",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "probabilities": {
+            "rule_1": 0.5492,
+            "default": 0.4508
+          },
+          "confidence": 0.007,
+          "answer_confidence": 0.5492,
+          "action": {
+            "act_probability": 1.0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 159,
+        "output_tokens": 0
+      },
+      "routing": {
+        "model": "english",
+        "repo": "convaiinnovations/laya",
+        "reason": "English Latin text",
+        "detection": {
+          "script": "latin",
+          "script_profile": {
+            "latin": 1.0
+          },
+          "language": "en",
+          "is_english": true,
+          "language_undecided": false,
+          "diacritic_rate": 0.0,
+          "non_latin_fraction": 0.0,
+          "mixed_segment": null
+        },
+        "workflow": null
+      }
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "real",
+    "status": 200,
+    "response": {
+      "model": "laya-rl-agent",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "probabilities": {
+            "rule_1": 0.5492,
+            "default": 0.4508
+          },
+          "confidence": 0.007,
+          "answer_confidence": 0.5492,
+          "action": {
+            "act_probability": 1.0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 159,
+        "output_tokens": 0
+      },
+      "routing": {
+        "model": "english",
+        "repo": "convaiinnovations/laya",
+        "reason": "English Latin text",
+        "detection": {
+          "script": "latin",
+          "script_profile": {
+            "latin": 1.0
+          },
+          "language": "en",
+          "is_english": true,
+          "language_undecided": false,
+          "diacritic_rate": 0.0,
+          "non_latin_fraction": 0.0,
+          "mixed_segment": null
+        },
+        "workflow": null
+      }
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "real",
+    "status": 200,
+    "response": {
+      "model": "laya-rl-agent",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "probabilities": {
+            "rule_1": 0.5492,
+            "default": 0.4508
+          },
+          "confidence": 0.007,
+          "answer_confidence": 0.5492,
+          "action": {
+            "act_probability": 1.0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 159,
+        "output_tokens": 0
+      },
+      "routing": {
+        "model": "english",
+        "repo": "convaiinnovations/laya",
+        "reason": "English Latin text",
+        "detection": {
+          "script": "latin",
+          "script_profile": {
+            "latin": 1.0
+          },
+          "language": "en",
+          "is_english": true,
+          "language_undecided": false,
+          "diacritic_rate": 0.0,
+          "non_latin_fraction": 0.0,
+          "mixed_segment": null
+        },
+        "workflow": null
+      }
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": false,
+    "mode": "real",
+    "status": 401,
+    "response": {
+      "detail": "invalid or missing bearer token"
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "500",
+    "status": 500,
+    "response": {
+      "detail": "controlled outage"
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "malformed",
+    "status": 200,
+    "response": {
+      "answers": {}
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "low",
+    "status": 200,
+    "response": {
+      "model": "jev-compatible-boundary",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "confidence": 0.4,
+          "probabilities": {
+            "rule_1": 0.99,
+            "default": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 3
+      }
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "high",
+    "status": 200,
+    "response": {
+      "model": "jev-compatible-boundary",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "confidence": 0.99,
+          "probabilities": {
+            "rule_1": 0.99,
+            "default": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 3
+      }
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "high",
+    "status": 200,
+    "response": {
+      "model": "jev-compatible-boundary",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "confidence": 0.99,
+          "probabilities": {
+            "rule_1": 0.99,
+            "default": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 3
+      }
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "high",
+    "status": 200,
+    "response": {
+      "model": "jev-compatible-boundary",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "confidence": 0.99,
+          "probabilities": {
+            "rule_1": 0.99,
+            "default": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 3
+      }
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "high",
+    "status": 200,
+    "response": {
+      "model": "jev-compatible-boundary",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "confidence": 0.99,
+          "probabilities": {
+            "rule_1": 0.99,
+            "default": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 3
+      }
+    }
+  },
+  {
+    "path": "/v1/systemone",
+    "request": {
+      "model": "jev-latest",
+      "state": {
+        "task": {
+          "project": "disposable-pager",
+          "brief": "## Captain's intent\nFix the off-by-one bug in pager.sh.\n\n## Firstmate spec\nChange <= to < so the pager emits exactly one page per call.\n"
+        }
+      },
+      "questions": {
+        "rule": {
+          "type": "choice",
+          "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+          "criteria": {
+            "rule_1": "Fix the off-by-one bug in pager.sh.",
+            "default": "No listed rule applies to this task."
+          }
+        }
+      }
+    },
+    "authenticated": true,
+    "mode": "high",
+    "status": 200,
+    "response": {
+      "model": "jev-compatible-boundary",
+      "answers": {
+        "rule": {
+          "type": "choice",
+          "choice": "rule_1",
+          "confidence": 0.99,
+          "probabilities": {
+            "rule_1": 0.99,
+            "default": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 3
+      }
+    }
+  }
+]

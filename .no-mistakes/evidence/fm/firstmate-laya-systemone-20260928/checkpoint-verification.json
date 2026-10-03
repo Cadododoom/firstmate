@@ -1,0 +1,15 @@
+{
+  "source": {
+    "type": "file",
+    "oid": "9bef25a12dcb807627a798837cfbb0ea73c0e38d",
+    "size": 842609210,
+    "lfs": {
+      "oid": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c",
+      "size": 842609210,
+      "pointerSize": 134
+    },
+    "xetHash": "dd8562d713759821a0bc049e79abd09e5817d218d18fa51478ad16986d018764",
+    "path": "model.safetensors"
+  },
+  "verified_sha256": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c"
+}

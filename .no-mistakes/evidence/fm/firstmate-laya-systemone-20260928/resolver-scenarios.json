@@ -1,0 +1,202 @@
+[
+  {
+    "name": "Canonical Laya low confidence withholds a concrete profile",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: ambiguous\n  model: laya-rl-agent   latency_ms: 759   tokens: 159/0\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.007\n  probabilities: rule_1=0.5492 default=0.4508\n  reason: confidence 0.007 below floor 0.6\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Canonical Laya probability above declared floor returns concrete medium-effort profile",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: clear\n  model: laya-rl-agent   latency_ms: 729   tokens: 159/0\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.007\n  probabilities: rule_1=0.5492 default=0.4508\n  note: rule matched\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Home .env activates Laya without TypeSafe key",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: clear\n  model: laya-rl-agent   latency_ms: 708   tokens: 159/0\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.007\n  probabilities: rule_1=0.5492 default=0.4508\n  note: rule matched\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n  profile: --harness 'codex' --model 'gpt-6.1-sol' --effort 'medium'\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Environment provider overrides home Laya provider",
+    "pass": true,
+    "exit": 0,
+    "stdout": "",
+    "stderr": "dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M40GY10ZS9HAJHS15K9R9WXR/.live-laya/home/.env)\n",
+    "requests": 0
+  },
+  {
+    "name": "Default without TypeSafe key stays off despite Laya URL",
+    "pass": true,
+    "exit": 0,
+    "stdout": "",
+    "stderr": "dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M40GY10ZS9HAJHS15K9R9WXR/.live-laya/home/.env)\n",
+    "requests": 0
+  },
+  {
+    "name": "Missing explicit Laya URL reports error without fallback",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: LAYA_SYSTEMONE_BASE_URL absent from the environment and /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M40GY10ZS9HAJHS15K9R9WXR/.live-laya/home/.env\n",
+    "stderr": "dispatch-resolve: error (LAYA_SYSTEMONE_BASE_URL absent from the environment and /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M40GY10ZS9HAJHS15K9R9WXR/.live-laya/home/.env)\n",
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe endpoint http://example.com",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)\n",
+    "stderr": "dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))\n",
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe endpoint https://user:pass@example.com",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)\n",
+    "stderr": "dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))\n",
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe endpoint https://example.com/path",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)\n",
+    "stderr": "dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))\n",
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe endpoint https://example.com?token=x",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)\n",
+    "stderr": "dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))\n",
+    "requests": 0
+  },
+  {
+    "name": "Reject unsafe endpoint https://example.com/#x",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment)\n",
+    "stderr": "dispatch-resolve: error (invalid LAYA_SYSTEMONE_BASE_URL (use an HTTPS origin or a loopback HTTP origin without credentials, path, query, or fragment))\n",
+    "requests": 0
+  },
+  {
+    "name": "Unsupported provider is configuration error",
+    "pass": true,
+    "exit": 2,
+    "stdout": "",
+    "stderr": "error: DISPATCH_SYSTEMONE_PROVIDER must be typesafe or laya\n",
+    "requests": 0
+  },
+  {
+    "name": "Reject CR/LF bearer header injection 'a\\rb'",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: provider API key contains a line break\n",
+    "stderr": "dispatch-resolve: error (provider API key contains a line break)\n",
+    "requests": 0
+  },
+  {
+    "name": "Reject CR/LF bearer header injection 'a\\nb'",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: provider API key contains a line break\n",
+    "stderr": "dispatch-resolve: error (provider API key contains a line break)\n",
+    "requests": 0
+  },
+  {
+    "name": "Wrong Laya key returns authentication error without fallback",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: http 401 after 28 ms: {\"detail\":\"invalid or missing bearer token\"}\n",
+    "stderr": "dispatch-resolve: error (http 401 after 28 ms: {\"detail\":\"invalid or missing bearer token\"})\n",
+    "requests": 1
+  },
+  {
+    "name": "Laya server outage returns error without fallback",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: http 500 after 29 ms: {\"detail\":\"controlled outage\"}\n",
+    "stderr": "dispatch-resolve: error (http 500 after 29 ms: {\"detail\":\"controlled outage\"})\n",
+    "requests": 1
+  },
+  {
+    "name": "Malformed response returns error without profile",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: error\n  reason: response is not a rule Choice answer\n",
+    "stderr": "dispatch-resolve: error (response is not a rule Choice answer)\n",
+    "requests": 1
+  },
+  {
+    "name": "Low confidence returns ambiguity without profile",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: ambiguous\n  model: jev-compatible-boundary   latency_ms: 26   tokens: 30/3\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.4\n  probabilities: rule_1=0.99 default=0.01\n  reason: confidence 0.4 below floor 0.6\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Provider cannot bypass captain approval",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: escalate\n  model: jev-compatible-boundary   latency_ms: 28   tokens: 30/3\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.99\n  probabilities: rule_1=0.99 default=0.01\n  reason: rule requires the captain's explicit approval before dispatch\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Provider cannot select exhausted quota candidate",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: escalate\n  model: jev-compatible-boundary   latency_ms: 27   tokens: 30/3\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.99\n  probabilities: rule_1=0.99 default=0.01\n  reason: no rankable eligible candidate\n  note: rule matched\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=0%  spendPriority=-  runway=through_reset  -> not eligible: 0% remaining at all_models\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Provider cannot bypass declared quota floor",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: escalate\n  model: jev-compatible-boundary   latency_ms: 30   tokens: 30/3\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.99\n  probabilities: rule_1=0.99 default=0.01\n  reason: no rankable eligible candidate\n  note: rule matched\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=-  runway=through_reset  -> not eligible: profile floor all_models below 90%\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Never-send task content blocks Laya request",
+    "pass": true,
+    "exit": 0,
+    "stdout": "",
+    "stderr": "dispatch-resolve: off (brief text matches /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M40GY10ZS9HAJHS15K9R9WXR/.live-laya/home/config/dispatch-never-send line 1; nothing sent)\n",
+    "requests": 0
+  },
+  {
+    "name": "Per-rule probability floor returns ambiguity",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: ambiguous\n  model: jev-compatible-boundary   latency_ms: 31   tokens: 30/3\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.99\n  probabilities: rule_1=0.99 default=0.01\n  reason: rule_1 probability 0.99 below its floor 1.0; no other option clears its own floor\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Equal spend priority does not choose by array order",
+    "pass": true,
+    "exit": 0,
+    "stdout": "dispatch-resolve:\n  status: escalate\n  model: jev-compatible-boundary   latency_ms: 29   tokens: 30/3\n  rule: rule_1 (Fix the off-by-one bug in pager.sh.)   confidence: 0.99\n  probabilities: rule_1=0.99 default=0.01\n  reason: genuine spendPriority tie\n  note: rule matched\n  candidate: codex:gpt-6.1-sol  provider=codex  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=80%  spendPriority=0.8  runway=through_reset  -> eligible\n",
+    "stderr": "",
+    "requests": 1
+  },
+  {
+    "name": "Unverified harness rejected before network",
+    "pass": true,
+    "exit": 2,
+    "stdout": "",
+    "stderr": "error: malformed rules file: /home/cadodolap_works/.no-mistakes/worktrees/e57655a07a4e/01M40GY10ZS9HAJHS15K9R9WXR/.live-laya/home/config/crew-dispatch.json - each use profile must name a verified harness\n",
+    "requests": 0
+  }
+]
