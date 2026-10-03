@@ -96,7 +96,32 @@ call(['submit'], request('remote', 'window-request', dict(project='demo', job='j
 policy = request('policy', 'policy-request', dict(project='demo'), dict(posture='autonomy', delivery_mode='local-only', merge_autonomy=True))
 call(['submit'], policy)
 for level, target in [('global', {}), ('project', {'project':'demo'}), ('job', {'project':'demo','job':'job','generation':'gen-1'})]:
-    call(['submit'], request('defaults-'+level, 'defaults-request', dict(level=level, **target), dict(harness='codex', effort='high')))
+    defaults_scope = dict(level=level, **target)
+    valid_defaults = request('defaults-'+level, 'defaults-request', defaults_scope, dict(harness='codex', effort='high'))
+    valid_note = call(['submit'], valid_defaults)
+    call(['answer', valid_note['id']], dict(decision='approved', reason='supported effort', scope=defaults_scope))
+    invalid_defaults = request('ultra-'+level, 'defaults-request', defaults_scope, dict(harness='codex', effort='ultra'))
+    assert 'ultra effort requires' in call(['submit'], invalid_defaults, False)['error']
+    legacy = subprocess.run(['bash', str(pathlib.Path(cli).parent/'fm-inbox.sh'), 'note',
+                             '--request-id', 'workforce:'+invalid_defaults['request_id'], '--json', '-'],
+                            input='Workforce request v1\n'+json.dumps(invalid_defaults, separators=(',', ':'), sort_keys=True),
+                            text=True, capture_output=True, env={k:v for k,v in os.environ.items() if not k.startswith('FM_') or k == 'FM_HOME'})
+    assert legacy.returncode == 0, legacy.stderr
+    legacy_note = json.loads(legacy.stdout)
+    assert call(['submit'], invalid_defaults)['id'] == legacy_note['id']
+    assert 'ultra effort requires' in call(['answer', legacy_note['id']],
+        dict(decision='approved', reason='unsupported effort', scope=defaults_scope), False)['error']
+    call(['answer', legacy_note['id']], dict(decision='declined', reason='unsupported effort', scope=defaults_scope))
+for i, preferences in enumerate([dict(effort='ultra'), dict(harness='pi', effort='ultra'),
+        dict(harness='pi-signed', effort='ultra'), dict(harness='pi', model='other', effort='ultra'),
+        dict(harness='pi-signed', model='codex-native/', effort='ultra')]):
+    assert 'ultra effort requires' in call(['submit'], request('unsupported-ultra-'+str(i),
+        'defaults-request', dict(level='global'), preferences), False)['error']
+for harness in ['pi', 'pi-signed']:
+    native = subprocess.run(['bash', str(pathlib.Path(cli).parent/'fm-harness.sh'),
+                             'validate-native-effort', harness, 'codex-native/example', 'ultra'],
+                            text=True, capture_output=True)
+    assert native.returncode == 0, native.stderr
 call(['submit'], request('unknown-model', 'defaults-request', dict(level='global'), dict(harness='unsupported', model='assumed')), False)
 call(['submit'], dict(policy, request_id='injection', payload=dict(policy['payload'], executable='/bin/sh')), False)
 call(['submit'], dict(policy, request_id='other-home', home='/tmp'), False)
@@ -126,7 +151,18 @@ job = request('new-worker', 'job-request', dict(project='demo'),
     dict(kind='ship', text='bounded job', posture='assistant', delivery_mode='local-only',
          merge_autonomy=False, preferences=dict(harness='codex', effort='high'),
          preference_revision=view['preferences']['revision']))
-call(['submit'], job)
+new_worker_note = call(['submit'], job)
+call(['answer', new_worker_note['id']], dict(decision='approved', reason='supported worker preferences', scope=job['scope']))
+invalid_worker = dict(job, request_id='ultra-worker', payload=dict(job['payload'], preferences=dict(harness='codex', effort='ultra')))
+assert 'ultra effort requires' in call(['submit'], invalid_worker, False)['error']
+legacy_worker = subprocess.run(['bash', str(pathlib.Path(cli).parent/'fm-inbox.sh'), 'note', '--json', '-'],
+    input='Workforce request v1\n'+json.dumps(invalid_worker, separators=(',', ':'), sort_keys=True),
+    text=True, capture_output=True, env={k:v for k,v in os.environ.items() if not k.startswith('FM_') or k == 'FM_HOME'})
+assert legacy_worker.returncode == 0, legacy_worker.stderr
+legacy_worker_id = json.loads(legacy_worker.stdout)['id']
+assert 'ultra effort requires' in call(['answer', legacy_worker_id],
+    dict(decision='approved', reason='unsupported worker preferences', scope=job['scope']), False)['error']
+call(['answer', legacy_worker_id], dict(decision='refused', reason='unsupported worker preferences', scope=job['scope']))
 call(['submit'], dict(job, request_id='missing-snapshot', payload={k:v for k,v in job['payload'].items() if k != 'preference_revision'}), False)
 assert not (home/'config/crew-harness').exists()
 inherited = view['preferences']

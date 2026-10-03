@@ -236,10 +236,15 @@ def validate_preferences(env, payload, current):
                 fail('unsupported harness')
     if 'model' in payload:
         text(payload['model'], 'model', 256)
-        if current:
-            catalog = model_catalog(payload['harness'])
-            if payload['model'] not in catalog['models']:
-                fail('model not established by authoritative catalog: ' + catalog['reason'])
+    if current and 'effort' in payload:
+        result = run(env, 'fm-harness.sh', 'validate-native-effort',
+                     payload.get('harness', ''), payload.get('model', ''), payload['effort'])
+        if result.returncode:
+            fail(result.stderr.strip() or 'unsupported harness/model/effort combination')
+    if current and 'model' in payload:
+        catalog = model_catalog(payload['harness'])
+        if payload['model'] not in catalog['models']:
+            fail('model not established by authoritative catalog: ' + catalog['reason'])
 
 
 def validate(home, env, request, current=True):
