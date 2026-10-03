@@ -25,7 +25,12 @@ The sandbox policy sets Landlock to `hard_requirement`, which requires Landlock 
 
 ## Files and task channels
 
-The runner creates a private, no-hardlinks clone of the assigned task branch under `/tmp/fm-<task>/openshell-codex/workspace`. It copies tracked and non-ignored untracked task files, plus staged changes. Ignored files and submodules are unsupported. It sends the clone through OpenShell's supported file-transfer API into `/sandbox`, the only project and task data path. System paths are read-only; `/tmp` is private scratch space and `/dev/null` is writable as a device. The host worktree, shared Git directory, `HOME`, SSH state, Codex host configuration, task state directory, and other worktrees are not mounted or copied into the sandbox.
+The runner creates a private, no-hardlinks clone of the assigned task branch under `/tmp/fm-<task>/openshell-codex/workspace`.
+It copies tracked task files, including staged additions and changes.
+Ignored files and submodules are unsupported.
+It sends the clone through OpenShell's supported file-transfer API into `/sandbox`, the only project and task data path.
+System paths are read-only; `/tmp` is private scratch space and `/dev/null` is writable as a device.
+The host worktree, shared Git directory, `HOME`, SSH state, Codex host configuration, task state directory, and other worktrees are not mounted or copied into the sandbox.
 
 At initial spawn, Firstmate resolves `OPENSHELL_WORKSPACE` (or OpenShell's `default` workspace when unset) to its exact gateway workspace ID and records both name and ID in task metadata and the recovery journal.
 Every OpenShell operation explicitly selects that name and checks its current ID against the task record; missing identity or a workspace recreated under the same name refuses execution and cleanup.
@@ -33,6 +38,7 @@ Relaunch reuses the recorded identity regardless of the current shell selection.
 
 The Herdr pane runs `openshell sandbox exec --tty`, preserving the interactive Codex PTY while Herdr continues to own pane and session lifecycle.
 Codex uses a private `CODEX_HOME`, with its own sandbox disabled because OpenShell supplies the process boundary.
+The encoded launch brief is uploaded to a private sandbox file; Codex receives a fixed file pointer in argv rather than the brief contents.
 Fresh sandbox Codex defaults to `gpt-6.1-sol` with `medium` reasoning effort, while explicit task model and effort overrides take precedence.
 Git identity is copied as non-secret values; the HTTPS origin is copied without credentials.
 
@@ -40,7 +46,8 @@ Firstmate relays only the current task's numbered inbox messages, validated one-
 The relay polls the task channel through OpenShell file transfers while Codex is active.
 The sandbox cannot pass host paths or task ids to these operations.
 Workspace changes are downloaded and synchronized only to the task's recorded branch using a fast-forward and compare-and-swap check.
-Staged and non-ignored uncommitted changes are preserved.
+Staged changes and unstaged changes or deletions of tracked files are preserved.
+Untracked files are excluded from preparation and synchronization; unrelated host files remain untouched.
 File and symlink leaves can become directories, or directories can become leaves, by retiring obsolete leaves before copying replacements; unrelated directory contents refuse replacement and remain intact.
 
 ## Host validation handoff

@@ -24,6 +24,7 @@ WORKSPACE_IN_SANDBOX = "/sandbox"
 CAPABILITY_IN_SANDBOX = "/sandbox/.git/fm-openshell/fm-task-capability"
 HOOKS_IN_SANDBOX = "/sandbox/.git/fm-openshell/task-hooks"
 CHANNEL_IN_SANDBOX = "/sandbox/.git/fm-openshell/channel"
+BRIEF_IN_SANDBOX = "/sandbox/.git/fm-openshell/launch-brief.txt"
 STATUS_RE = re.compile(
     r"^(?:working|needs-decision|blocked|paused|done|failed|resolved|note) "
     r"(?:\[at=[0-9]+\](?: \[key=[a-z0-9][a-z0-9-]*\])?|"
@@ -255,7 +256,7 @@ def write_journal(ctx, data):
 
 
 def git_paths(repo):
-    raw = git_bytes(repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+    raw = git_bytes(repo, "ls-files", "-z", "--cached")
     if raw is None:
         fail("could not enumerate task worktree paths")
     result = set()
@@ -382,13 +383,10 @@ def copy_path(source_root, dest_root, rel, baseline=None):
         if os.path.isabs(link) or normalized_link == ".." or normalized_link.startswith("../"):
             if not (baseline and baseline.get(rel, {}).get("kind") == "symlink" and baseline[rel].get("target") == link):
                 fail("sandbox created a symlink that escapes the task worktree: " + rel)
-        tmp = target.with_name("." + target.name + ".fm-openshell-tmp")
-        try:
-            tmp.unlink()
-        except FileNotFoundError:
-            pass
-        os.symlink(link, str(tmp))
-        os.replace(str(tmp), str(target))
+        with tempfile.TemporaryDirectory(prefix=".fm-openshell-", dir=str(target.parent)) as tmp_dir:
+            tmp = Path(tmp_dir) / "link"
+            os.symlink(link, str(tmp))
+            os.replace(str(tmp), str(target))
         return
     if not stat.S_ISREG(info.st_mode):
         fail("sandbox produced an unsupported file type: " + rel)
@@ -419,7 +417,10 @@ def apply_files(source_root, dest_root, paths, states, baseline, expected):
     for rel in ordered:
         if not same_content(state_for(dest_root, rel), expected.get(rel, {"kind": "missing"})):
             fail("task worktree changed during OpenShell file transition: " + rel)
-        copy_path(source_root, dest_root, rel, baseline)
+        if rel in deletions:
+            remove_leaf(dest_root, rel)
+        else:
+            copy_path(source_root, dest_root, rel, baseline)
 
 
 def safe_origin(repo):
@@ -1201,6 +1202,12 @@ def setup_sandbox(ctx, journal):
 
 
 def run_codex(ctx, journal, prompt, model, effort):
+    with tempfile.TemporaryDirectory(prefix=".fm-openshell-brief-", dir=str(ctx["stage_root"])) as tmp_dir:
+        brief = Path(tmp_dir) / "launch-brief.txt"
+        with brief.open("x", encoding="utf-8") as output:
+            os.chmod(str(brief), 0o600)
+            output.write(prompt)
+        upload_file(ctx, brief, BRIEF_IN_SANDBOX.rsplit("/", 1)[0])
     args = [
         "sandbox", "exec", "--name", ctx["sandbox"],
         "--workdir", WORKSPACE_IN_SANDBOX, "--no-login-shell", "--tty",
@@ -1234,7 +1241,7 @@ def run_codex(ctx, journal, prompt, model, effort):
             "hooks",
             "-c",
             'notify=["' + CAPABILITY_IN_SANDBOX + '","turn-ended"]',
-            prompt,
+            "Read the brief at " + BRIEF_IN_SANDBOX + " and follow it exactly.",
         ]
     )
     command = openshell_argv(ctx, *args, "--", *codex_args)
@@ -1399,12 +1406,7 @@ def sync_workspace(ctx, journal):
         run(["git", "-C", str(ctx["worktree"]), "read-tree", head], env=cli_env(), capture=True)
         if staged_patch:
             run(["git", "-C", str(ctx["worktree"]), "apply", "--cached", "--binary", "--whitespace=nowarn", "-"], env=cli_env(), input_bytes=staged_patch, capture=True)
-        present = {path for path in paths if states[path]["kind"] != "missing"}
-        obsolete = set(journal["base_paths"]) - set(paths)
-        for path in set(paths) - present:
-            if any(other.startswith(path + "/") or path.startswith(other + "/") for other in present):
-                obsolete.add(path)
-        all_paths = present | obsolete
+        all_paths = set(paths) | set(journal["base_paths"])
         apply_files(ctx["stage"], ctx["worktree"], all_paths, states, journal["base_files"], journal["base_files"])
         run(["git", "-C", str(ctx["worktree"]), "update-ref", "-d", temporary_ref], env=cli_env(), capture=True, check=False)
         journal["phase"] = "synced"

@@ -12,6 +12,7 @@ import shutil
 import time
 import sys
 import tempfile
+import tarfile
 from unittest.mock import patch
 
 root = Path(sys.argv[1])
@@ -30,18 +31,20 @@ import json, os, pathlib, sys
 args = sys.argv[1:]
 with open(os.environ["COMMAND_LOG"], "a") as f:
     f.write(json.dumps(args) + "\\n")
+if "sandbox" in args and "upload" in args and pathlib.Path(args[-2]).name == "launch-brief.txt":
+    pathlib.Path(os.environ["BRIEF_LOG"]).write_bytes(pathlib.Path(args[-2]).read_bytes())
 workspace = args[args.index("--workspace") + 1] if "--workspace" in args else os.environ.get("OPENSHELL_WORKSPACE", "default")
 if "workspace" in args and "get" in args:
     print("Workspace:\\n\\n  Name: " + workspace + "\\n  Id: " + pathlib.Path(os.environ["WORKSPACE_ID_FILE"]).read_text())
 ''')
     fake.chmod(0o755)
     env = dict(os.environ, PATH=str(base) + os.pathsep + os.environ["PATH"],
-               COMMAND_LOG=str(log), WORKSPACE_ID_FILE=str(identity), OPENSHELL_WORKSPACE="other",
+               COMMAND_LOG=str(log), BRIEF_LOG=str(base / "brief-delivered"), WORKSPACE_ID_FILE=str(identity), OPENSHELL_WORKSPACE="other",
                SSH_AUTH_SOCK=str(base / "host-agent.sock"), GIT_SSH_COMMAND="host-ssh-command",
                GIT_CONFIG_GLOBAL=str(base / "host-gitconfig"))
     ctx = dict(id="task", home=base, state=base, gateway="local", workspace="team",
                workspace_id="workspace-original", journal=base / "journal.json", worktree=base,
-               sandbox="task-sandbox", values={})
+               sandbox="task-sandbox", stage_root=base, values={})
     def commands():
         return [json.loads(line) for line in log.read_text().splitlines()]
     def refuses(call):
@@ -76,13 +79,20 @@ if "workspace" in args and "get" in args:
             ("", "", "gpt-6.1-sol", "medium"),
             ("custom-model", "high", "custom-model", "high"),
             ("gpt-5.6-luna", "max", "gpt-5.6-luna", "max")]:
+            prompt = "FIRSTMATE_OP: v1 launch-brief\nPrivate task words: 'quoted' $value `literal`\nUnicode: café\n"
             with patch.object(runner, "sync_channels", lambda ctx: None):
-                assert runner.run_codex(ctx, {}, "task brief", model, effort) == 0
+                assert runner.run_codex(ctx, {}, prompt, model, effort) == 0
+            assert (base / "brief-delivered").read_bytes() == prompt.encode("utf-8")
+            assert all(prompt not in arg and "Private task words" not in arg for command in commands() for arg in command)
+            assert not list(base.glob(".fm-openshell-brief-*"))
             args = commands()[-1]
             codex = args[args.index("--") + 1:]
             assert codex[codex.index("--model") + 1] == expected_model
             assert 'model_reasoning_effort="' + expected_effort + '"' in codex
             assert "--dangerously-bypass-approvals-and-sandbox" in codex
+            assert codex[-1] == "Read the brief at /sandbox/.git/fm-openshell/launch-brief.txt and follow it exactly."
+            upload = [command for command in commands() if "upload" in command][-1]
+            assert upload[-1] == "/sandbox/.git/fm-openshell"
             assert "CODEX_HOME=/tmp/fm-codex-home" in args
             forwarded = dict(args[i + 1].split("=", 1) for i, arg in enumerate(args) if arg == "--env")
             assert "SSH_AUTH_SOCK" not in forwarded
@@ -114,7 +124,7 @@ with tempfile.TemporaryDirectory(dir=root / "tests", prefix="openshell-fixes-") 
     base = Path(tmp)
     fake = base / "openshell"
     fake.write_text("""#!/usr/bin/env python3
-import os, sys, time
+import os, pathlib, shutil, sys, time
 args = sys.argv[1:]
 if 'workspace' in args and 'get' in args:
     name = args[args.index('--workspace') + 1]
@@ -122,6 +132,8 @@ if 'workspace' in args and 'get' in args:
 elif 'sandbox' in args and 'get' in args:
     print('sandbox not found', file=sys.stderr)
     sys.exit(1)
+elif 'sandbox' in args and 'download' in args:
+    shutil.copytree(os.environ['DOWNLOAD_SOURCE'], pathlib.Path(args[-1]) / 'sandbox', symlinks=True)
 elif '--' in args and args[args.index('--') + 1] == 'codex':
     time.sleep(20)
 """)
@@ -287,13 +299,12 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
                     (stage / "a").symlink_to("payload")
                 else:
                     (stage / "a").write_text("new leaf")
-            if representation != "unstaged":
-                runner.git(stage, "add", "-A")
+            runner.git(stage, "add", "-A")
             if representation == "committed":
                 runner.git(stage, "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "transition incoming")
             runner.write_journal(ctx, old)
             return ctx, old
-        for representation in ["committed", "staged", "unstaged"]:
+        for representation in ["committed", "staged"]:
             for direction in ["to-directory", "to-leaf"]:
                 for kind in ["file", "symlink"]:
                     for interrupted in [False, True]:
@@ -324,6 +335,117 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
                             assert os.readlink(target) == "payload"
                         else:
                             assert target.read_text() == "new leaf"
+        for representation in ["unstaged", "staged", "committed"]:
+            for recovery in [False, True]:
+                ctx, journal = make_repo("deletion-" + representation + str(recovery))
+                (ctx["stage"] / "payload").unlink()
+                if representation != "unstaged":
+                    runner.git(ctx["stage"], "add", "-u")
+                if representation == "committed":
+                    runner.git(ctx["stage"], "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "delete payload")
+                (ctx["worktree"] / "unrelated").write_text("host-only data")
+                if recovery:
+                    with patch.object(runner, "load_context", return_value=ctx), patch.object(runner, "endpoint_agent_free"), patch.object(runner, "sandbox_get", return_value=True), patch.object(runner, "stop_then_start_sandbox"), patch.object(runner, "download_workspace"), patch.object(runner, "delete_sandbox"), patch.object(runner, "cleanup_artifacts"):
+                        runner.recover_task("task")
+                else:
+                    runner.sync_workspace(ctx, journal)
+                assert not (ctx["worktree"] / "payload").exists()
+                assert runner.git(ctx["worktree"], "status", "--porcelain", "--untracked-files=no") == runner.git(ctx["stage"], "status", "--porcelain", "--untracked-files=no")
+                assert (ctx["worktree"] / "unrelated").read_text() == "host-only data"
+        ctx, journal = make_repo("removed-from-index")
+        runner.git(ctx["stage"], "rm", "--cached", "payload")
+        (ctx["stage"] / "payload").write_text("now-untracked sandbox data")
+        runner.sync_workspace(ctx, journal)
+        assert not (ctx["worktree"] / "payload").exists()
+        assert (ctx["stage"] / "payload").read_text() == "now-untracked sandbox data"
+        ctx, journal = make_repo("deletion-rollback")
+        (ctx["stage"] / "payload").unlink()
+        original_remove = runner.remove_leaf
+        def fail_after_deletion(dest, rel):
+            original_remove(dest, rel)
+            if dest == ctx["worktree"] and rel == "payload":
+                raise runner.Refusal("injected failure after deletion")
+        with patch.object(runner, "remove_leaf", fail_after_deletion):
+            refuses(lambda: runner.sync_workspace(ctx, journal))
+        assert (ctx["worktree"] / "payload").read_text() == "original payload"
+        assert journal["phase"] == "snapshot-downloaded"
+        runner.sync_workspace(ctx, journal)
+        assert not (ctx["worktree"] / "payload").exists()
+        ctx, journal = make_repo("symlink-siblings")
+        wt, stage = ctx["worktree"], ctx["stage"]
+        (wt / "a").symlink_to("payload")
+        (wt / ".a.fm-openshell-tmp").write_text("tracked sibling")
+        runner.git(wt, "add", ".")
+        runner.git(wt, "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "symlink baseline")
+        shutil.rmtree(ctx["stage_root"])
+        ctx["journal"].unlink()
+        ctx["channel"] = ctx["bridge_dir"] / "inbox"
+        ctx["responses"] = ctx["bridge_dir"] / "responses"
+        (ctx["state"] / "task.inbox").mkdir()
+        journal = runner.prepare_workspace(ctx)
+        assert (stage / ".a.fm-openshell-tmp").read_text() == "tracked sibling"
+        assert os.readlink(stage / "a") == "payload"
+        (wt / ".b.fm-openshell-tmp").mkdir()
+        (wt / ".b.fm-openshell-tmp" / "secret").write_text("unrelated sibling")
+        (stage / "a").unlink()
+        (stage / "a").symlink_to("index")
+        (stage / "b").symlink_to("payload")
+        runner.git(stage, "add", "a", "b")
+        original_copy = runner.copy_path
+        def fail_after_link(source, dest, rel, baseline=None):
+            original_copy(source, dest, rel, baseline)
+            if source == stage and rel == "b":
+                raise runner.Refusal("injected failure after symlink replacement")
+        with patch.object(runner, "copy_path", fail_after_link):
+            refuses(lambda: runner.sync_workspace(ctx, journal))
+        assert os.readlink(wt / "a") == "payload"
+        assert not (wt / "b").is_symlink()
+        assert (wt / ".a.fm-openshell-tmp").read_text() == "tracked sibling"
+        assert (wt / ".b.fm-openshell-tmp" / "secret").read_text() == "unrelated sibling"
+        runner.sync_workspace(ctx, journal)
+        assert os.readlink(wt / "a") == "index"
+        assert os.readlink(wt / "b") == "payload"
+        assert (wt / ".a.fm-openshell-tmp").read_text() == "tracked sibling"
+        assert (wt / ".b.fm-openshell-tmp" / "secret").read_text() == "unrelated sibling"
+        ctx, journal = make_repo("tracked-transfer")
+        wt = ctx["worktree"]
+        (wt / ".gitignore").write_text("ignored\n")
+        runner.git(wt, "add", ".gitignore")
+        runner.git(wt, "-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-qm", "ignore rule")
+        (wt / "staged-new").write_text("staged addition")
+        runner.git(wt, "add", "staged-new")
+        (wt / "untracked").write_text("host-only untracked")
+        (wt / "ignored").write_text("host-only ignored")
+        (wt / "payload").unlink()
+        shutil.rmtree(ctx["stage_root"])
+        ctx["journal"].unlink()
+        ctx["channel"] = ctx["bridge_dir"] / "inbox"
+        ctx["responses"] = ctx["bridge_dir"] / "responses"
+        (ctx["state"] / "task.inbox").mkdir()
+        journal = runner.prepare_workspace(ctx)
+        assert set(journal["base_paths"]) == {".gitignore", "index", "payload", "staged-new"}
+        archive = runner.workspace_archive(ctx)
+        with tarfile.open(archive) as uploaded:
+            names = {member.name.removeprefix("./") for member in uploaded.getmembers()}
+            assert "staged-new" in names and "index" in names
+            assert not {"untracked", "ignored", "payload"} & names
+        archive.unlink()
+        remote = ctx["home"] / "remote"
+        shutil.copytree(ctx["stage"], remote, symlinks=True)
+        (remote / "sandbox-untracked").write_text("excluded sandbox output")
+        (remote / "ignored").write_text("excluded ignored output")
+        (remote / "staged-new").write_text("changed tracked output")
+        with patch.dict(os.environ, DOWNLOAD_SOURCE=str(remote)):
+            runner.download_workspace(ctx, journal)
+        _, _, paths, states = runner.verify_stage(ctx, journal)
+        assert set(paths) == {".gitignore", "index", "payload", "staged-new"}
+        assert "sandbox-untracked" not in states and "ignored" not in states
+        runner.sync_workspace(ctx, journal)
+        assert (wt / "staged-new").read_text() == "changed tracked output"
+        assert not (wt / "sandbox-untracked").exists()
+        assert (wt / "untracked").read_text() == "host-only untracked"
+        assert (wt / "ignored").read_text() == "host-only ignored"
+        assert not (wt / "payload").exists()
         ctx, journal = transition_case("ignored-transition", "to-leaf")
         runner.git(ctx["worktree"], "config", "--local", "core.excludesFile", str(ctx["home"] / "excludes"))
         (ctx["home"] / "excludes").write_text("a/secret\n")
