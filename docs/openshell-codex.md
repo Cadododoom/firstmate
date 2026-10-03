@@ -6,7 +6,7 @@ Firstmate can run an individual Herdr Codex ship worker inside NVIDIA OpenShell.
 
 The opt-in supports Linux Herdr Codex ship tasks using the `no-mistakes` delivery mode. It requires an installed OpenShell CLI, a registered and reachable OpenShell gateway, a gateway with the OpenShell `base` image available, and already configured providers. OpenShell's base image includes Codex. The gateway may use a supported compute driver; Firstmate uses OpenShell's sandbox upload and download operations and does not request host bind mounts or disable resource admission.
 
-Scouts and secondmates are refused while the setting applies because their reports or home capabilities live outside the assigned task worktree. Other backends and harnesses remain unchanged. Direct-PR delivery is not supported: the task worker does not receive host `gh-axi`, and OpenShell's standard GitHub profile permits clone and fetch but denies Git push. The `no-mistakes` pipeline runs after the worker commits and handles push and PR creation outside the sandbox.
+Scouts and secondmates are refused while the setting applies because their reports or home capabilities live outside the assigned task worktree. Other backends and harnesses remain unchanged. Direct-PR delivery is not supported: the task worker does not receive host `gh-axi`, and OpenShell's standard GitHub profile permits clone and fetch but denies Git push. The `no-mistakes` pipeline runs after the worker commits, with forge-specific delivery governed by the host validation handoff below.
 
 ## Setup
 
@@ -27,13 +27,53 @@ The sandbox policy sets Landlock to `hard_requirement`, which requires Landlock 
 
 The runner creates a private, no-hardlinks clone of the assigned task branch under `/tmp/fm-<task>/openshell-codex/workspace`. It copies tracked and non-ignored untracked task files, plus staged changes. Ignored files and submodules are unsupported. It sends the clone through OpenShell's supported file-transfer API into `/sandbox`, the only project and task data path. System paths are read-only; `/tmp` is private scratch space and `/dev/null` is writable as a device. The host worktree, shared Git directory, `HOME`, SSH state, Codex host configuration, task state directory, and other worktrees are not mounted or copied into the sandbox.
 
-The Herdr pane runs `openshell sandbox exec --tty`, preserving the interactive Codex PTY while Herdr continues to own pane and session lifecycle. Codex uses a private `CODEX_HOME`, with its own sandbox disabled because OpenShell supplies the process boundary. Git identity is copied as non-secret values; the HTTPS origin is copied without credentials.
+At initial spawn, Firstmate resolves `OPENSHELL_WORKSPACE` (or OpenShell's `default` workspace when unset) to its exact gateway workspace ID and records both name and ID in task metadata and the recovery journal.
+Every OpenShell operation explicitly selects that name and checks its current ID against the task record; missing identity or a workspace recreated under the same name refuses execution and cleanup.
+Relaunch reuses the recorded identity regardless of the current shell selection.
 
-Firstmate relays only the current task's numbered inbox messages, validated one-line status appends, and its fixed turn-ended marker. The relay polls the task channel through OpenShell file transfers while Codex is active. The sandbox cannot pass host paths or task ids to these operations. Workspace changes are downloaded and synchronized only to the task's recorded branch using a fast-forward and compare-and-swap check. Staged and non-ignored uncommitted changes are preserved.
+The Herdr pane runs `openshell sandbox exec --tty`, preserving the interactive Codex PTY while Herdr continues to own pane and session lifecycle.
+Codex uses a private `CODEX_HOME`, with its own sandbox disabled because OpenShell supplies the process boundary.
+Fresh sandbox Codex defaults to `gpt-6.1-sol` with `medium` reasoning effort, while explicit task model and effort overrides take precedence.
+Git identity is copied as non-secret values; the HTTPS origin is copied without credentials.
+
+Firstmate relays only the current task's numbered inbox messages, validated one-line status appends, its fixed turn-ended marker, and a fixed validation handoff request.
+The relay polls the task channel through OpenShell file transfers while Codex is active.
+The sandbox cannot pass host paths or task ids to these operations.
+Workspace changes are downloaded and synchronized only to the task's recorded branch using a fast-forward and compare-and-swap check.
+Staged and non-ignored uncommitted changes are preserved.
+File and symlink leaves can become directories, or directories can become leaves, by retiring obsolete leaves before copying replacements; unrelated directory contents refuse replacement and remain intact.
+
+## Host validation handoff
+
+The delivered overlay replaces the brief's host setup and validation instructions for this sandbox session.
+The worker commits its project changes on the assigned branch and runs `/sandbox/.git/fm-openshell/fm-task-capability validation request` instead of appending `done`.
+The request accepts no task ID, host path, command, or credentials.
+The runner ends its sandbox execution, stops any remaining sandbox process, and downloads the snapshot through the workspace-bound transfer API.
+A handoff requires a clean worktree with all changes committed, so synchronization returns committed tracked project files; uncommitted or non-ignored untracked files refuse the handoff and retain recovery artifacts.
+After synchronization and sandbox deletion, the host records the exact HEAD and task/workspace identity in `state/<task>.openshell-validation.json` and appends the readiness status.
+Herdr continues to own the task pane and session.
+
+Firstmate supplies the task's authoritative intent in a regular host file and explicitly runs:
+
+```sh
+FM_HOME=/path/to/firstmate-home \
+FM_ROOT_OVERRIDE=/path/to/firstmate-code \
+python3 /path/to/firstmate-code/bin/fm-openshell-codex.py validate TASK_ID \
+  --intent-file /path/to/task-intent.txt
+```
+
+This command requires the Herdr endpoint to be dead or missing, the recorded workspace ID to remain valid, the sandbox to be absent, and the host branch, clean worktree, and HEAD to match the handoff.
+It resolves the recorded project's forge through `fm-project-mode.sh` and invokes `no-mistakes axi run` only in that task's host worktree, returning its exit code and output.
+For a registered Gerrit project it passes exactly `--skip push,pr,ci`; all other validation phases still run, and the existing Gerrit publication contract remains on the host.
+Other supported forges receive no additional skips; an invalid registered forge refuses validation.
+The host must already have an initialized no-mistakes repository and its normal validation toolchain; setup failures remain explicit failures.
+Firstmate handles subsequent gates and outcomes through the normal no-mistakes workflow on the host.
+The sandbox receives no host validation credentials, mounts, or additional policy permissions.
 
 ## Failure and recovery
 
 OpenShell setup, policy, TTY, provider, transfer, or synchronization failures stop this launch. Firstmate never retries as host Codex. If the runner exits unexpectedly, the sandbox may remain with an interrupted Codex process; the task's files and task metadata are retained. The worker does not resume the same Codex conversation after recovery.
+A recorded validation request is completed by recovery only after its clean committed snapshot synchronizes; failed synchronization never publishes validation readiness.
 
 After proving that the task's Herdr endpoint is dead or missing, recover the exact task sandbox with:
 

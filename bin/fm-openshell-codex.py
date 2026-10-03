@@ -118,7 +118,7 @@ def git_bytes(repo, *args, input_bytes=None, check=True):
     return None if result is None else result.stdout
 
 
-def load_context(task_id):
+def load_context(task_id, *, require_live=True):
     if not TASK_ID_RE.fullmatch(task_id):
         fail("invalid task id")
     root = Path(os.environ.get("FM_ROOT_OVERRIDE") or Path(__file__).resolve().parents[1]).resolve()
@@ -163,21 +163,28 @@ def load_context(task_id):
         fail("OpenShell sandbox name is not bound to this Firstmate home and task")
     if values.get("openshell_keep_ai_trailers", "0") not in ("0", "1"):
         fail("task metadata has an invalid AI trailer setting")
+    workspace = values.get("openshell_workspace", "")
+    workspace_id = values.get("openshell_workspace_id", "")
+    validate_workspace(workspace, workspace_id)
     worktree_value = values.get("worktree", "")
     worktree_input = Path(worktree_value)
-    if not worktree_input.is_absolute() or worktree_input.is_symlink() or not worktree_input.is_dir():
+    if (not worktree_input.is_absolute() or worktree_input.is_symlink()
+            or (worktree_input.exists() and not worktree_input.is_dir())
+            or (require_live and not worktree_input.is_dir())):
         fail("assigned task worktree is missing or is a symlink")
     worktree = worktree_input.resolve()
     tasktmp_value = values.get("tasktmp", "")
     if not tasktmp_value or not Path(tasktmp_value).is_absolute():
         fail("task temp root is missing or is not absolute")
     tasktmp = Path(tasktmp_value)
-    if not tasktmp.is_absolute() or tasktmp.is_symlink() or not tasktmp.is_dir():
+    if (not tasktmp.is_absolute() or tasktmp.is_symlink()
+            or (tasktmp.exists() and not tasktmp.is_dir())
+            or (require_live and not tasktmp.is_dir())):
         fail("task temp root is missing or unsafe")
     tasktmp = tasktmp.resolve()
     if tasktmp_value != "/tmp/fm-" + task_id:
         fail("task temp root does not match Firstmate's task-scoped temp path")
-    if tasktmp.stat().st_uid != os.getuid() or tasktmp.stat().st_mode & 0o077:
+    if tasktmp.exists() and (tasktmp.stat().st_uid != os.getuid() or tasktmp.stat().st_mode & 0o077):
         fail("task temp root is not private to the launching user")
     branch = values.get("branch", "")
     checked = run(["git", "check-ref-format", "--branch", branch], env=cli_env(), capture=True, check=False) if branch else None
@@ -190,6 +197,8 @@ def load_context(task_id):
         "state": state_dir,
         "config": config_dir,
         "gateway": gateway,
+        "workspace": workspace,
+        "workspace_id": workspace_id,
         "meta": meta,
         "values": values,
         "providers": providers,
@@ -199,6 +208,7 @@ def load_context(task_id):
         "stage_root": tasktmp / "openshell-codex",
         "stage": tasktmp / "openshell-codex" / "workspace",
         "journal": tasktmp / "openshell-codex-state.json",
+        "validation": state_dir / (task_id + ".openshell-validation.json"),
         "bridge_dir": tasktmp / "openshell-codex-bridge",
         "channel": tasktmp / "openshell-codex-bridge" / "inbox",
         "responses": tasktmp / "openshell-codex-bridge" / "responses",
@@ -219,11 +229,15 @@ def read_journal(ctx):
         fail("OpenShell recovery journal is unreadable: " + str(exc))
     if data.get("task_id") != ctx["id"] or data.get("worktree") != str(ctx["worktree"]):
         fail("OpenShell recovery journal identity does not match this task")
+    if data.get("workspace") != ctx["workspace"] or data.get("workspace_id") != ctx["workspace_id"]:
+        fail("OpenShell recovery journal workspace does not match this task")
     return data
 
 
 def write_journal(ctx, data):
     path = ctx["journal"]
+    data["workspace"] = ctx["workspace"]
+    data["workspace_id"] = ctx["workspace_id"]
     data["task_id"] = ctx["id"]
     data["worktree"] = str(ctx["worktree"])
     tmp = path.with_name(path.name + ".tmp")
@@ -272,10 +286,12 @@ def state_for(root, rel):
         except FileNotFoundError:
             return {"kind": "missing"}
         if not stat.S_ISDIR(parent_mode):
-            fail("refusing to inspect a worktree path through a non-directory parent: " + rel)
+            return {"kind": "missing"}
     try:
         info = path.lstat()
     except FileNotFoundError:
+        return {"kind": "missing"}
+    if stat.S_ISDIR(info.st_mode):
         return {"kind": "missing"}
     if stat.S_ISLNK(info.st_mode):
         return {"kind": "symlink", "target": os.readlink(str(path))}
@@ -302,10 +318,42 @@ def snapshot(root, paths):
     return {path: state_for(root, path) for path in paths}
 
 
+def remove_leaf(root, rel):
+    current = root
+    for part in rel.split("/")[:-1]:
+        current = current / part
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            return
+        if not stat.S_ISDIR(mode):
+            return
+    target = root / rel
+    try:
+        mode = target.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(mode):
+        return
+    if not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+        fail("refusing to remove an unsupported worktree entry: " + rel)
+    target.unlink()
+    parent = target.parent
+    while parent != root:
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+        parent = parent.parent
+
+
 def copy_path(source_root, dest_root, rel, baseline=None):
     validate_relative(rel)
     source = source_root / rel
     target = dest_root / rel
+    if state_for(source_root, rel)["kind"] == "missing":
+        remove_leaf(dest_root, rel)
+        return
     for root, path in ((source_root, source), (dest_root, target)):
         current = root
         for part in rel.split("/")[:-1]:
@@ -318,27 +366,16 @@ def copy_path(source_root, dest_root, rel, baseline=None):
                 continue
             if not stat.S_ISDIR(mode):
                 fail("refusing to follow a non-directory parent in " + rel)
-    try:
-        info = source.lstat()
-    except FileNotFoundError:
-        try:
-            target_info = target.lstat()
-        except FileNotFoundError:
-            return
-        if stat.S_ISDIR(target_info.st_mode):
-            try:
-                target.rmdir()
-            except OSError:
-                fail("refusing to remove a non-empty worktree path: " + rel)
-        else:
-            target.unlink()
-        return
+    info = source.lstat()
     try:
         old = target.lstat()
     except FileNotFoundError:
         old = None
     if old and stat.S_ISDIR(old.st_mode):
-        fail("worktree file would replace a directory: " + rel)
+        try:
+            target.rmdir()
+        except OSError:
+            fail("worktree file would replace a directory containing unrelated data: " + rel)
     if stat.S_ISLNK(info.st_mode):
         link = os.readlink(str(source))
         normalized_link = os.path.normpath(os.path.join(os.path.dirname(rel), link))
@@ -373,6 +410,16 @@ def copy_path(source_root, dest_root, rel, baseline=None):
             os.unlink(tmp_name)
         except FileNotFoundError:
             pass
+
+
+def apply_files(source_root, dest_root, paths, states, baseline, expected):
+    deletions = {path for path in paths if states.get(path, {}).get("kind", "missing") == "missing"}
+    ordered = sorted(deletions, key=lambda path: (-path.count("/"), os.fsencode(path)))
+    ordered.extend(sorted(set(paths) - deletions, key=os.fsencode))
+    for rel in ordered:
+        if not same_content(state_for(dest_root, rel), expected.get(rel, {"kind": "missing"})):
+            fail("task worktree changed during OpenShell file transition: " + rel)
+        copy_path(source_root, dest_root, rel, baseline)
 
 
 def safe_origin(repo):
@@ -917,8 +964,31 @@ def refresh_inbox_mirror(ctx, stage_inbox=None):
     return fingerprint.hexdigest()
 
 
+def validate_workspace(name, workspace_id):
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,17}[a-z0-9])?", name):
+        fail("task has a missing or invalid OpenShell workspace name")
+    if not isinstance(workspace_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", workspace_id):
+        fail("task has a missing or invalid OpenShell workspace ID")
+
+
+def workspace_identity(gateway, name):
+    validate_workspace(name, "lookup")
+    result = run(["openshell", "--gateway", gateway, "--workspace", name,
+                  "--color", "never", "workspace", "get", name], capture=True)
+    text = result.stdout.decode("utf-8", "strict")
+    names = re.findall(r"^  Name: (\S+)\s*$", text, re.MULTILINE)
+    ids = re.findall(r"^  Id: (\S+)\s*$", text, re.MULTILINE)
+    if names != [name] or len(ids) != 1:
+        fail("OpenShell could not establish the exact selected workspace identity")
+    validate_workspace(name, ids[0])
+    return ids[0]
+
+
 def openshell_argv(ctx, *args):
-    return ["openshell", "--gateway", ctx["gateway"], *args]
+    validate_workspace(ctx.get("workspace"), ctx.get("workspace_id"))
+    if workspace_identity(ctx["gateway"], ctx["workspace"]) != ctx["workspace_id"]:
+        fail("OpenShell workspace ID differs from the task's recorded identity")
+    return ["openshell", "--gateway", ctx["gateway"], "--workspace", ctx["workspace"], *args]
 
 
 def openshell_run(ctx, *args, capture=True, check=True, input_bytes=None):
@@ -978,7 +1048,17 @@ def channel_request(ctx, request_id, request):
         if op == "inbox.ack" and set(request) == {"op", "name"} and isinstance(request["name"], str):
             text = inbox_ack(ctx, request["name"])
             refresh_inbox_mirror(ctx)
+        elif op == "validation.request" and set(request) == {"op"}:
+            journal = read_journal(ctx)
+            if not journal or journal.get("phase") != "agent-running":
+                fail("host validation can only be requested by the running task")
+            journal["validation_requested"] = True
+            write_journal(ctx, journal)
+            ctx["validation_requested"] = True
+            text = "host validation handoff requested; this sandbox session will end"
         elif op == "status.append" and set(request) == {"op", "line"} and isinstance(request["line"], str):
+            if request["line"].startswith("done "):
+                fail("use validation request; the host reports readiness after synchronization")
             text = status_append(ctx, request["line"])
         elif op == "turn-ended" and set(request) == {"op"}:
             text = turn_ended(ctx)
@@ -1053,6 +1133,15 @@ def encoded_prompt(ctx, brief_path):
         "This worker runs inside an OpenShell sandbox. Host paths named below are not mounted. "
         "This channel overlay takes precedence for inbox, status, and turn-end operations. "
         "The host relays these exact operations through OpenShell's sandbox file-transfer API.\n\n"
+        "For no-mistakes delivery, this overlay also replaces host setup and validation instructions. "
+        "Do not run no-mistakes doctor, init, or validation inside the sandbox. "
+        "Implement the task, commit all project changes on the assigned branch, and leave a clean worktree. "
+        f"Then run `{CAPABILITY_IN_SANDBOX} validation request` instead of appending done. "
+        "This ends this sandbox session. The host synchronizes the committed tracked files before "
+        "reporting readiness, and firstmate runs the explicit host validation command described in "
+        "docs/openshell-codex.md with the task's authoritative intent. The registered forge contract "
+        "still applies: Gerrit validation skips exactly push,pr,ci and its later publication stays on "
+        "the host; other registered forges receive no additional skips. Do not push from the sandbox.\n\n"
         "Read the assigned steering messages in numeric order with "
         f"`{CAPABILITY_IN_SANDBOX} inbox list`, read each with "
         f"`{CAPABILITY_IN_SANDBOX} inbox read NNN.msg`, then acknowledge it with "
@@ -1093,7 +1182,6 @@ def create_sandbox(ctx, journal):
     archive_path = workspace_archive(ctx)
     upload_file(ctx, archive_path, "/sandbox")
     extract_workspace(ctx, archive_path)
-    archive_path.unlink()
     journal["phase"] = "workspace-uploaded"
     write_journal(ctx, journal)
     ctx["inbox_fingerprint"] = refresh_inbox_mirror(ctx)
@@ -1129,9 +1217,9 @@ def run_codex(ctx, journal, prompt, model, effort):
         agent_env.update({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": HOOKS_IN_SANDBOX})
     for key, value in agent_env.items():
         args.extend(["--env", key + "=" + value])
-    codex_args = ["codex"]
-    if model and model != "default":
-        codex_args.extend(["--model", model])
+    model = "gpt-6.1-sol" if not model or model == "default" else model
+    effort = "medium" if not effort or effort == "default" else effort
+    codex_args = ["codex", "--model", model]
     if effort in ("low", "medium", "high", "xhigh"):
         codex_args.extend(["-c", "model_reasoning_effort=\"" + effort + "\""])
     elif effort == "max" and model == "gpt-5.6-luna":
@@ -1157,10 +1245,24 @@ def run_codex(ctx, journal, prompt, model, effort):
             now = time.monotonic()
             if now >= next_sync:
                 sync_channels(ctx)
+                if ctx.get("validation_requested"):
+                    journal["validation_requested"] = True
+                    write_journal(ctx, journal)
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    break
                 next_sync = now + 1.0
             time.sleep(0.1)
         result = process.wait()
         sync_channels(ctx)
+        if ctx.get("validation_requested"):
+            journal["validation_requested"] = True
+            write_journal(ctx, journal)
+            return 0
         return result
     except Exception:
         if process.poll() is None:
@@ -1228,18 +1330,33 @@ def check_host_unchanged(ctx, journal):
 
 def backup_host(ctx, journal):
     backup = ctx["stage_root"] / "host-backup"
-    if backup.exists() or backup.is_symlink():
-        fail("task recovery backup already exists")
+    if backup.is_symlink():
+        fail("task recovery backup is unsafe")
+    if backup.exists():
+        if journal.get("phase") != "snapshot-downloaded" or not backup.is_dir():
+            fail("task recovery backup already exists")
+        check_host_unchanged(ctx, journal)
+        shutil.rmtree(str(backup))
     backup.mkdir(mode=0o700)
+    (backup / "files").mkdir(mode=0o700)
     for path in journal["base_paths"]:
         if journal["base_files"][path]["kind"] != "missing":
-            copy_path(ctx["worktree"], backup, path, journal["base_files"])
+            copy_path(ctx["worktree"], backup / "files", path, journal["base_files"])
     shutil.copy2(str(task_index_path(ctx["worktree"])), str(backup / "index"))
     return backup
 
 
 def restore_host(ctx, journal, backup, final_head=None):
     wt = ctx["worktree"]
+    baseline = set(journal["base_paths"])
+    paths = baseline | set(journal.get("sync_paths", []))
+    current_states = snapshot(wt, sorted(paths, key=os.fsencode))
+    for path in sorted(paths, key=os.fsencode):
+        actual = current_states[path]
+        baseline_state = journal["base_files"].get(path, {"kind": "missing"})
+        expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
+        if not same_content(actual, baseline_state) and not same_content(actual, expected):
+            fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
     if final_head and final_head != journal["base_head"]:
         current = git(wt, "rev-parse", "refs/heads/" + ctx["branch"])
         if current == final_head:
@@ -1247,25 +1364,14 @@ def restore_host(ctx, journal, backup, final_head=None):
         elif current != journal["base_head"]:
             fail("task branch changed during OpenShell rollback; preserving recovery artifacts")
     run(["git", "-C", str(wt), "read-tree", journal["base_head"]], env=cli_env(), capture=True)
-    baseline = set(journal["base_paths"])
-    for path in sorted(set(journal.get("sync_paths", [])) - baseline, key=os.fsencode):
-        actual = state_for(wt, path)
-        expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
-        if not same_content(actual, {"kind": "missing"}) and not same_content(actual, expected):
-            fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
-        copy_path(backup, wt, path)
-    for path in journal["base_paths"]:
-        actual = state_for(wt, path)
-        baseline_state = journal["base_files"][path]
-        expected = journal.get("sync_files", {}).get(path, {"kind": "missing"})
-        if not same_content(actual, baseline_state) and not same_content(actual, expected):
-            fail("task worktree changed during OpenShell rollback; preserving recovery artifacts")
-        copy_path(backup, wt, path, journal["base_files"])
+    apply_files(backup / "files", wt, paths, journal["base_files"], journal["base_files"], current_states)
     shutil.copy2(str(backup / "index"), str(task_index_path(wt)))
 
 
 def sync_workspace(ctx, journal):
     head, staged_patch, paths, states = verify_stage(ctx, journal)
+    if journal.get("validation_requested"):
+        require_committed_workspace(ctx["stage"])
     check_host_unchanged(ctx, journal)
     backup = backup_host(ctx, journal)
     journal["phase"] = "syncing"
@@ -1290,29 +1396,17 @@ def sync_workspace(ctx, journal):
         run(["git", "-C", str(ctx["worktree"]), "read-tree", head], env=cli_env(), capture=True)
         if staged_patch:
             run(["git", "-C", str(ctx["worktree"]), "apply", "--cached", "--binary", "--whitespace=nowarn", "-"], env=cli_env(), input_bytes=staged_patch, capture=True)
-        existing = set(journal["base_paths"])
-        incoming = set(paths)
-        for rel in sorted(existing - incoming, key=os.fsencode):
-            copy_path(backup, ctx["worktree"], rel, journal["base_files"])
-            target = ctx["worktree"] / rel
-            try:
-                info = target.lstat()
-            except FileNotFoundError:
-                continue
-            if stat.S_ISDIR(info.st_mode):
-                try:
-                    target.rmdir()
-                except OSError:
-                    fail("sandbox removed a worktree file whose directory now contains unrelated data")
-            else:
-                target.unlink()
-        all_paths = incoming | existing
-        all_states = snapshot(ctx["stage"], sorted(all_paths, key=os.fsencode))
-        for rel in sorted(all_paths, key=os.fsencode):
-            if all_states.get(rel, {}).get("kind") != "missing":
-                copy_path(ctx["stage"], ctx["worktree"], rel, journal["base_files"])
+        present = {path for path in paths if states[path]["kind"] != "missing"}
+        obsolete = set(journal["base_paths"]) - set(paths)
+        for path in set(paths) - present:
+            if any(other.startswith(path + "/") or path.startswith(other + "/") for other in present):
+                obsolete.add(path)
+        all_paths = present | obsolete
+        apply_files(ctx["stage"], ctx["worktree"], all_paths, states, journal["base_files"], journal["base_files"])
         run(["git", "-C", str(ctx["worktree"]), "update-ref", "-d", temporary_ref], env=cli_env(), capture=True, check=False)
         journal["phase"] = "synced"
+        if journal.get("validation_requested"):
+            journal["validation_head"] = head
         for key in ("sync_head", "sync_paths", "sync_files"):
             journal.pop(key, None)
         write_journal(ctx, journal)
@@ -1324,6 +1418,7 @@ def sync_workspace(ctx, journal):
             for key in ("sync_head", "sync_paths", "sync_files"):
                 journal.pop(key, None)
             write_journal(ctx, journal)
+            shutil.rmtree(str(backup))
         except Exception as rollback_error:
             fail("OpenShell worktree sync failed and rollback is incomplete: " + str(rollback_error))
         raise
@@ -1374,6 +1469,7 @@ def run_task(task_id, brief_path, model, effort):
         download_workspace(ctx, journal)
         sync_workspace(ctx, journal)
         delete_sandbox(ctx)
+        publish_validation_handoff(ctx, journal)
         cleanup_artifacts(ctx)
         return agent_rc
     except BaseException:
@@ -1383,6 +1479,65 @@ def run_task(task_id, brief_path, model, effort):
             except Exception as stop_error:
                 print("fm-openshell-codex: could not confirm sandbox stop; recovery artifacts remain: " + str(stop_error), file=sys.stderr)
         raise
+
+
+def require_committed_workspace(worktree):
+    if git(worktree, "status", "--porcelain", "--untracked-files=all"):
+        fail("host validation handoff requires committed tracked changes and a clean worktree")
+
+
+def publish_validation_handoff(ctx, journal):
+    if not journal.get("validation_requested"):
+        return
+    if journal.get("phase") != "synced":
+        fail("host validation handoff requires a synchronized task snapshot")
+    require_committed_workspace(ctx["worktree"])
+    head = git(ctx["worktree"], "rev-parse", "HEAD")
+    if head != journal.get("validation_head"):
+        fail("host validation handoff HEAD differs from the synchronized snapshot")
+    record = {"task_id": ctx["id"], "worktree": str(ctx["worktree"]), "branch": ctx["branch"],
+              "head": head, "gateway": ctx["gateway"],
+              "workspace": ctx["workspace"], "workspace_id": ctx["workspace_id"]}
+    atomic_write(ctx["validation"], (json.dumps(record, sort_keys=True) + "\n").encode("utf-8"))
+    status_append(ctx, "done [at=" + str(int(time.time())) + "]: committed OpenShell snapshot ready for host validation at " + head)
+
+
+def validate_task(task_id, intent_file):
+    ctx = load_context(task_id, require_live=False)
+    endpoint_agent_free(ctx)
+    guard_task(task_id)
+    path = ctx["validation"]
+    if path.is_symlink() or not path.is_file():
+        fail("task has no safe host validation handoff record")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    expected = {"task_id": ctx["id"], "worktree": str(ctx["worktree"]), "branch": ctx["branch"],
+                "head": git(ctx["worktree"], "rev-parse", "HEAD"),
+                "gateway": ctx["gateway"], "workspace": ctx["workspace"], "workspace_id": ctx["workspace_id"]}
+    if record != expected or git(ctx["worktree"], "symbolic-ref", "--short", "HEAD") != ctx["branch"]:
+        fail("host validation handoff does not match the task's current identity and HEAD")
+    require_committed_workspace(ctx["worktree"])
+    intent_path = Path(intent_file)
+    if intent_path.is_symlink() or not intent_path.is_file():
+        fail("host validation requires a regular task intent file")
+    intent = intent_path.read_text(encoding="utf-8")
+    if not intent.strip():
+        fail("host validation requires the task's authoritative intent")
+    project = Path(ctx["values"].get("project", ""))
+    if not project.is_absolute():
+        fail("host validation requires the task's recorded project")
+    result = run(["bash", str(ctx["root"] / "bin" / "fm-project-mode.sh"), "--forge", project.name],
+                 env={**os.environ, "FM_HOME": str(ctx["home"]), "FM_ROOT_OVERRIDE": str(ctx["root"])}, capture=True)
+    forge = result.stdout.decode("utf-8").strip()
+    if forge not in ("none", "gerrit"):
+        fail("task project has an unsupported registered forge")
+    command = ["no-mistakes", "axi", "run", "--intent", intent]
+    if forge == "gerrit":
+        command.extend(["--skip", "push,pr,ci"])
+    result = run(command,
+                 cwd=ctx["worktree"], env=os.environ.copy(), capture=False, check=False)
+    if result is None:
+        fail("no-mistakes is unavailable on the host")
+    return result.returncode
 
 
 def endpoint_agent_free(ctx):
@@ -1406,7 +1561,7 @@ def endpoint_agent_free(ctx):
 
 
 def recover_task(task_id):
-    ctx = load_context(task_id)
+    ctx = load_context(task_id, require_live=False)
     endpoint_agent_free(ctx)
     journal = read_journal(ctx)
     exists = sandbox_get(ctx)
@@ -1415,6 +1570,8 @@ def recover_task(task_id):
             fail("sandbox exists without its task recovery journal; preserve it for manual inspection")
         return
     phase = journal.get("phase")
+    if phase != "synced":
+        ctx = load_context(task_id)
     if phase == "prepared" and exists:
         fail("an OpenShell sandbox exists before its ownership was recorded; preserve it for manual inspection")
     if phase in ("prepared", "sandbox-created", "workspace-uploaded"):
@@ -1430,29 +1587,30 @@ def recover_task(task_id):
     if phase in ("agent-running", "agent-exited", "downloading") and not exists:
         fail("OpenShell sandbox disappeared before its workspace snapshot was recovered; preserving task artifacts")
     recovering_sync = phase == "syncing"
-    if exists and phase != "synced":
-        stop_then_start_sandbox(ctx)
-        download_workspace(ctx, journal)
     if recovering_sync:
         backup = ctx["stage_root"] / "host-backup"
         if not backup.is_dir() or backup.is_symlink():
             fail("OpenShell sync was interrupted without a complete rollback backup")
         restore_host(ctx, journal, backup, journal.get("sync_head"))
-        shutil.rmtree(str(backup))
         journal["phase"] = "snapshot-downloaded"
         for key in ("sync_head", "sync_paths", "sync_files"):
             journal.pop(key, None)
         write_journal(ctx, journal)
+        shutil.rmtree(str(backup))
+    if exists and phase != "synced":
+        stop_then_start_sandbox(ctx)
+        download_workspace(ctx, journal)
     if journal.get("phase") != "synced":
         sync_workspace(ctx, journal)
     if exists:
         delete_sandbox(ctx)
+    publish_validation_handoff(ctx, journal)
     cleanup_artifacts(ctx)
     print("recovered the OpenShell worktree snapshot for " + task_id)
 
 
 def guard_task(task_id):
-    ctx = load_context(task_id)
+    ctx = load_context(task_id, require_live=False)
     journal = read_journal(ctx)
     if sandbox_get(ctx):
         fail("task has a retained OpenShell sandbox; recover it before teardown")
@@ -1466,15 +1624,26 @@ def main():
     run_parser = sub.add_parser("run")
     run_parser.add_argument("task_id")
     run_parser.add_argument("brief")
-    run_parser.add_argument("--model", default="default")
-    run_parser.add_argument("--effort", default="default")
+    run_parser.add_argument("--model", default="gpt-6.1-sol")
+    run_parser.add_argument("--effort", default="medium")
+    workspace_parser = sub.add_parser("workspace-id")
+    workspace_parser.add_argument("gateway")
+    workspace_parser.add_argument("workspace")
+    validate_parser = sub.add_parser("validate")
+    validate_parser.add_argument("task_id")
+    validate_parser.add_argument("--intent-file", required=True)
     sub.add_parser("recover").add_argument("task_id")
     sub.add_parser("guard").add_argument("task_id")
     sub.add_parser("cleanup").add_argument("task_id")
     args = parser.parse_args()
     try:
+        if args.action == "workspace-id":
+            print(workspace_identity(args.gateway, args.workspace))
+            return 0
         if args.action == "run":
             return run_task(args.task_id, args.brief, args.model, args.effort)
+        if args.action == "validate":
+            return validate_task(args.task_id, args.intent_file)
         if args.action == "recover":
             recover_task(args.task_id)
             return 0
@@ -1482,7 +1651,7 @@ def main():
             guard_task(args.task_id)
             return 0
         if args.action == "cleanup":
-            ctx = load_context(args.task_id)
+            ctx = load_context(args.task_id, require_live=False)
             cleanup_artifacts(ctx)
             return 0
     except Refusal as exc:
