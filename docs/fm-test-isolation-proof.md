@@ -238,8 +238,9 @@ On the stale package the case fails serially as well as concurrently, so it is a
 - Result: `FM_ISOLATION_SUMMARY total=31 failed=10 concurrency=4 duration_ms=295599` (exit 1).
 - Machine-readable result: [standalone isolation artifact](fm-test-standalone-isolation-proof.json), with `fm_test_run_jobs_enabled=false`.
 
-The current family includes `tests/fm-workforce.test.sh`, which exited 0 under four-worker concurrency in 85859 ms.
+The attempted family refresh included `tests/fm-workforce.test.sh`, which exited 0 under four-worker concurrency in 85859 ms.
 This run does not establish a refreshed family concurrency guarantee.
+Workforce remains in the serial `unclassified` family until a successful refresh establishes admission; the failed artifact records an experiment, not enabled runner behavior.
 Several existing candidates failed because their restricted `/usr/bin:/bin` paths could not find Bash on NixOS; others exposed an existing `raw: unbound variable` in pending-reply handling or failed remote-worker readiness.
 The remaining public-followup candidate stalled in its rechain lock wait; its owned command was terminated with SIGTERM after more than three minutes, and its resulting failure is included in the aggregate rather than presented as a completed conformance pass.
 All ten failing candidate scripts and the affected pending-reply implementation are unchanged from the PR base.
