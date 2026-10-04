@@ -198,6 +198,7 @@ def load_context(task_id, *, require_live=True):
         "state": state_dir,
         "config": config_dir,
         "gateway": gateway,
+        "image": values.get("openshell_image", ""),
         "workspace": workspace,
         "workspace_id": workspace_id,
         "meta": meta,
@@ -1234,10 +1235,13 @@ def encoded_prompt(ctx, brief_path):
 
 
 def create_sandbox(ctx, journal):
+    image = ctx.get("image", "")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/:@-]{0,1023}", image):
+        fail("task metadata requires an explicit OpenShell workload image; refusing an implicit base image")
     if sandbox_get(ctx):
         fail("the exact task OpenShell sandbox already exists; refusing to attach or overwrite it")
     command = [
-        "sandbox", "create", "--name", ctx["sandbox"], "--from", "base",
+        "sandbox", "create", "--name", ctx["sandbox"], "--from", image,
         "--policy", str(ctx["policy"]), "--detach", "--no-auto-providers",
     ]
     for provider in ctx["providers"]:

@@ -88,6 +88,21 @@ if "workspace" in args and "get" in args:
         refuses(lambda: runner.delete_sandbox(ctx))
         assert commands()[-1][-3:] == ["workspace", "get", "team"]
         identity.write_text("workspace-original")
+        image = "localhost/fm-openshell-codex@sha256:" + "c" * 64
+        launch_ctx = dict(ctx, image=image, policy=base / "policy.yaml", providers=["codex"])
+        count = len(commands())
+        for invalid in ["", "--host", "image with spaces", "image\nother"]:
+            refuses(lambda: runner.create_sandbox(dict(launch_ctx, image=invalid), {}))
+        assert len(commands()) == count
+        with patch.object(runner, "sandbox_get", return_value=None), \
+             patch.object(runner, "workspace_archive", return_value=base / "workspace.tar"), \
+             patch.object(runner, "upload_file"), patch.object(runner, "extract_workspace"), \
+             patch.object(runner, "refresh_inbox_mirror", return_value="inbox"):
+            runner.create_sandbox(launch_ctx, {})
+        create = [command for command in commands() if "create" in command][-1]
+        assert create[create.index("--from") + 1] == image, create
+        assert "--no-auto-providers" in create
+        assert create[create.index("--provider") + 1] == "codex"
         for model, effort, expected_model, expected_effort in [
             ("default", "default", "gpt-6.1-sol", "medium"),
             ("", "", "gpt-6.1-sol", "medium"),
@@ -229,7 +244,7 @@ elif '--' in args and args[args.index('--') + 1] == 'codex':
         responses = area / "responses"
         responses.mkdir()
         ctx = dict(id="task", root=root, home=area, state=state, config=area / "config", values={"project": str(wt)},
-                   gateway="local", workspace="team", workspace_id="exact-id", branch="task", sandbox="task-sandbox", providers=["codex"],
+                   gateway="local", workspace="team", workspace_id="exact-id", branch="task", sandbox="task-sandbox", image="localhost/fm-codex:test", providers=["codex"],
                    worktree=wt, stage_root=stage_root, stage=stage, journal=area / "journal.json",
                    policy=area / "policy.yaml", bridge_dir=area / "bridge", responses=responses,
                    validation=state / "task.openshell-validation.json", processed_requests=set())
@@ -865,13 +880,14 @@ os.execv(os.environ['REAL_GIT'], [os.environ['REAL_GIT'], *sys.argv[1:]])
         sandbox = "fm-codex-" + hashlib.sha256(os.fsencode(str(base)) + b"\0" + missing_id.encode()).hexdigest()[:24]
         metadata = dict(openshell="codex-v1", harness="codex", backend="herdr", kind="ship", mode="no-mistakes",
                         openshell_providers="codex", openshell_gateway="local", openshell_workspace="team",
-                        openshell_workspace_id="exact-id", openshell_name=sandbox,
+                        openshell_workspace_id="exact-id", openshell_image="localhost/fm-codex:test", openshell_name=sandbox,
                         worktree=str(missing_worktree), tasktmp="/tmp/fm-" + missing_id, branch="task")
         (state / (missing_id + ".meta")).write_text("".join(k + "=" + v + "\n" for k, v in metadata.items()))
         with patch.dict(os.environ, FM_HOME=str(base), FM_STATE_OVERRIDE=str(state)):
             refuses(lambda: runner.load_context(missing_id))
             runner.guard_task(missing_id)
             retired = runner.load_context(missing_id, require_live=False)
+            assert retired["image"] == "localhost/fm-codex:test"
             runner.cleanup_artifacts(retired)
             runner.cleanup_artifacts(retired)
         assert not missing_worktree.exists()

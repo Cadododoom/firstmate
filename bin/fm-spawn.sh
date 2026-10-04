@@ -2406,6 +2406,7 @@ fi
 OPENSH_ENABLED=0
 OPENSH_PROVIDERS=
 OPENSH_GATEWAY=
+OPENSH_IMAGE=
 OPENSH_WORKSPACE=
 OPENSH_WORKSPACE_ID=
 OPENSH_HASH=
@@ -2428,8 +2429,12 @@ opensh_validate_providers() {
   done
   [ "$count" -le 4 ]
 }
+opensh_validate_image() {
+  case "$1" in ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._/:@-]*) return 1 ;; esac
+  [ "${#1}" -le 1024 ]
+}
 opensh_read_config() {
-  local file=$1 line found_gateway=0 found_providers=0
+  local file=$1 line found_gateway=0 found_providers=0 found_image=0
   [ ! -L "$file" ] && [ -f "$file" ] || {
     echo "error: OpenShell opt-in must be a regular file at $file" >&2
     return 1
@@ -2447,12 +2452,18 @@ opensh_read_config() {
         OPENSH_PROVIDERS=${line#providers=}
         found_providers=1
         ;;
+      image=*)
+        [ "$found_image" -eq 0 ] || { echo "error: duplicate image= in $file" >&2; return 1; }
+        OPENSH_IMAGE=${line#image=}
+        found_image=1
+        ;;
       *) echo "error: unknown OpenShell opt-in setting in $file" >&2; return 1 ;;
     esac
   done <"$file"
   if ! { [ "$found_gateway" -eq 1 ] && opensh_validate_gateway "$OPENSH_GATEWAY" &&
+    [ "$found_image" -eq 1 ] && opensh_validate_image "$OPENSH_IMAGE" &&
     [ "$found_providers" -eq 1 ] && opensh_validate_providers "$OPENSH_PROVIDERS"; }; then
-    echo "error: $file must contain gateway=<registered-gateway-name> and one providers= list including codex (at most four registered provider names)" >&2
+    echo "error: $file must contain gateway=<registered-gateway-name>, image=<workload-image-reference>, and one providers= list including codex (at most four registered provider names)" >&2
     return 1
   fi
 }
@@ -2465,13 +2476,14 @@ if [ "$RELAUNCH" -eq 1 ]; then
     }
     OPENSH_PROVIDERS=$(fm_meta_get "$RELAUNCH_META" openshell_providers)
     OPENSH_GATEWAY=$(fm_meta_get "$RELAUNCH_META" openshell_gateway)
+    OPENSH_IMAGE=$(fm_meta_get "$RELAUNCH_META" openshell_image)
     OPENSH_WORKSPACE=$(fm_meta_get "$RELAUNCH_META" openshell_workspace)
     OPENSH_WORKSPACE_ID=$(fm_meta_get "$RELAUNCH_META" openshell_workspace_id)
     [ -n "$OPENSH_WORKSPACE" ] && [ -n "$OPENSH_WORKSPACE_ID" ] || {
       echo "error: task $ID is missing its recorded OpenShell workspace identity" >&2
       exit 1
     }
-    if ! opensh_validate_providers "$OPENSH_PROVIDERS" || ! opensh_validate_gateway "$OPENSH_GATEWAY"; then
+    if ! opensh_validate_providers "$OPENSH_PROVIDERS" || ! opensh_validate_gateway "$OPENSH_GATEWAY" || ! opensh_validate_image "$OPENSH_IMAGE"; then
       echo "error: task $ID has invalid recorded OpenShell settings; refusing a host Codex fallback" >&2
       exit 1
     fi
@@ -5015,7 +5027,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx openshell openshell_gateway openshell_workspace openshell_workspace_id openshell_providers openshell_name openshell_keep_ai_trailers", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx openshell openshell_gateway openshell_image openshell_workspace openshell_workspace_id openshell_providers openshell_name openshell_keep_ai_trailers", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -5054,6 +5066,7 @@ preserve_relaunch_meta() {
   if [ "$OPENSH_ENABLED" = 1 ]; then
     echo "openshell=codex-v1"
     echo "openshell_gateway=$OPENSH_GATEWAY"
+    echo "openshell_image=$OPENSH_IMAGE"
     echo "openshell_workspace=$OPENSH_WORKSPACE"
     echo "openshell_workspace_id=$OPENSH_WORKSPACE_ID"
     echo "openshell_providers=$OPENSH_PROVIDERS"
