@@ -2524,9 +2524,7 @@ if [ "$OPENSH_ENABLED" = 1 ]; then
   fi
   case "${MODEL:-default}" in default) MODEL=gpt-6.1-sol ;; esac
   case "${EFFORT:-default}" in default) EFFORT=medium ;; esac
-  OPENSH_HASH=$(python3 -c 'import hashlib,os,sys; print(hashlib.sha256(os.fsencode(os.path.realpath(sys.argv[1]))+bytes([0])+sys.argv[2].encode()).hexdigest()[:24])' "$FM_HOME" "$ID") || exit 1
-  case "$OPENSH_HASH" in *[!0-9a-f]*|'') echo "error: could not derive task-scoped OpenShell names" >&2; exit 1 ;; esac
-  OPENSH_NAME="fm-codex-$OPENSH_HASH"
+  OPENSH_NAME=$("$OPENSH_PYTHON" "$FM_ROOT/bin/fm-openshell-codex.py" sandbox-name "$FM_HOME" "$ID") || exit 1
   if [ "$RELAUNCH" -eq 1 ] && [ "$RELAUNCH_OPENSH" = codex-v1 ]; then
     [ "$(fm_meta_get "$RELAUNCH_META" openshell_name)" = "$OPENSH_NAME" ] &&
       [ "$(fm_meta_get "$RELAUNCH_META" openshell_gateway)" = "$OPENSH_GATEWAY" ] || {

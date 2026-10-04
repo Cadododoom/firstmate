@@ -35,6 +35,10 @@ import json, os, pathlib, shutil, sys
 args = sys.argv[1:]
 with open(os.environ["COMMAND_LOG"], "a") as f:
     f.write(json.dumps(args) + "\\n")
+if "sandbox" in args and "create" in args and "--name" in args:
+    name = args[args.index("--name") + 1]
+    if len(name) > 19:
+        sys.exit("name exceeds maximum length (" + str(len(name)) + " > 19)")
 if "sandbox" in args and "upload" in args and "--no-git-ignore" in args:
     source = pathlib.Path(args[-2])
     destination = pathlib.PurePosixPath(args[-1])
@@ -89,10 +93,24 @@ if "workspace" in args and "get" in args:
         assert commands()[-1][-3:] == ["workspace", "get", "team"]
         identity.write_text("workspace-original")
         image = "localhost/fm-openshell-codex@sha256:" + "c" * 64
-        launch_ctx = dict(ctx, image=image, policy=base / "policy.yaml", providers=["codex"])
+        def generated_sandbox(home, task):
+            result = subprocess.run([sys.executable, str(root / "bin/fm-openshell-codex.py"),
+                                     "sandbox-name", str(home), task], capture_output=True, text=True)
+            assert result.returncode == 0, result.stderr
+            return result.stdout.strip()
+        generated_name = generated_sandbox(base, "task")
+        assert len(generated_name) == 19
+        assert re.fullmatch(r"[a-z0-9][a-z0-9-]*", generated_name)
+        assert generated_sandbox(base / ".", "task") == generated_name
+        assert generated_sandbox(base, "task-other") != generated_name
+        assert generated_sandbox(base / "other-home", "task") != generated_name
+        launch_ctx = dict(ctx, sandbox=generated_name, image=image, policy=base / "policy.yaml", providers=["codex"])
         count = len(commands())
         for invalid in ["", "--host", "image with spaces", "image\nother"]:
             refuses(lambda: runner.create_sandbox(dict(launch_ctx, image=invalid), {}))
+        assert len(commands()) == count
+        with patch.object(runner, "sandbox_get", return_value={"name": generated_name}):
+            refuses(lambda: runner.create_sandbox(launch_ctx, {}))
         assert len(commands()) == count
         with patch.object(runner, "sandbox_get", return_value=None), \
              patch.object(runner, "workspace_archive", return_value=base / "workspace.tar"), \
@@ -100,6 +118,7 @@ if "workspace" in args and "get" in args:
              patch.object(runner, "refresh_inbox_mirror", return_value="inbox"):
             runner.create_sandbox(launch_ctx, {})
         create = [command for command in commands() if "create" in command][-1]
+        assert create[create.index("--name") + 1] == generated_name, create
         assert create[create.index("--from") + 1] == image, create
         assert "--no-auto-providers" in create
         assert create[create.index("--provider") + 1] == "codex"
@@ -150,7 +169,7 @@ if "workspace" in args and "get" in args:
         refuses(lambda: runner.read_journal(ctx))
         state = base / "state"
         state.mkdir()
-        sandbox = "fm-codex-" + hashlib.sha256(os.fsencode(str(base)) + b"\0task").hexdigest()[:24]
+        sandbox = generated_name
         metadata = dict(openshell="codex-v1", harness="codex", backend="herdr", kind="ship",
                         mode="no-mistakes", openshell_providers="codex", openshell_gateway="local",
                         openshell_name=sandbox, worktree=str(base), tasktmp="/tmp/fm-task", branch="task")
@@ -877,7 +896,7 @@ os.execv(os.environ['REAL_GIT'], [os.environ['REAL_GIT'], *sys.argv[1:]])
         state = base / "retired-state"
         state.mkdir()
         missing_worktree = base / "retired-worktree"
-        sandbox = "fm-codex-" + hashlib.sha256(os.fsencode(str(base)) + b"\0" + missing_id.encode()).hexdigest()[:24]
+        sandbox = generated_sandbox(base, missing_id)
         metadata = dict(openshell="codex-v1", harness="codex", backend="herdr", kind="ship", mode="no-mistakes",
                         openshell_providers="codex", openshell_gateway="local", openshell_workspace="team",
                         openshell_workspace_id="exact-id", openshell_image="localhost/fm-codex:test", openshell_name=sandbox,
@@ -885,8 +904,16 @@ os.execv(os.environ['REAL_GIT'], [os.environ['REAL_GIT'], *sys.argv[1:]])
         (state / (missing_id + ".meta")).write_text("".join(k + "=" + v + "\n" for k, v in metadata.items()))
         with patch.dict(os.environ, FM_HOME=str(base), FM_STATE_OVERRIDE=str(state)):
             refuses(lambda: runner.load_context(missing_id))
+            for wrong_name in [generated_sandbox(base, "another-task"),
+                               generated_sandbox(base / "another-home", missing_id),
+                               "fm-codex-" + hashlib.sha256(os.fsencode(str(base)) + b"\0" + missing_id.encode()).hexdigest()[:24]]:
+                bad_metadata = dict(metadata, openshell_name=wrong_name)
+                (state / (missing_id + ".meta")).write_text("".join(k + "=" + v + "\n" for k, v in bad_metadata.items()))
+                refuses(lambda: runner.load_context(missing_id, require_live=False))
+            (state / (missing_id + ".meta")).write_text("".join(k + "=" + v + "\n" for k, v in metadata.items()))
             runner.guard_task(missing_id)
             retired = runner.load_context(missing_id, require_live=False)
+            assert retired["sandbox"] == sandbox
             assert retired["image"] == "localhost/fm-codex:test"
             runner.cleanup_artifacts(retired)
             runner.cleanup_artifacts(retired)

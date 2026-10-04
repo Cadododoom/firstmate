@@ -119,6 +119,15 @@ def git_bytes(repo, *args, input_bytes=None, check=True):
     return None if result is None else result.stdout
 
 
+def sandbox_name(home, task_id):
+    if not TASK_ID_RE.fullmatch(task_id):
+        fail("invalid task id")
+    # OpenShell 0.1.2 allows at most 19 characters, including the prefix.
+    return "fm-" + hashlib.sha256(
+        os.fsencode(str(Path(home).resolve())) + bytes([0]) + task_id.encode("utf-8")
+    ).hexdigest()[:16]
+
+
 def load_context(task_id, *, require_live=True):
     if not TASK_ID_RE.fullmatch(task_id):
         fail("invalid task id")
@@ -155,12 +164,7 @@ def load_context(task_id, *, require_live=True):
     gateway = values.get("openshell_gateway", "")
     if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9._-]{0,61}[A-Za-z0-9])?", gateway):
         fail("task metadata has an invalid OpenShell gateway name")
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,62}", values.get("openshell_name", "")):
-        fail("task metadata has an invalid OpenShell sandbox name")
-    expected_sandbox = "fm-codex-" + hashlib.sha256(
-        os.fsencode(str(home)) + bytes([0]) + task_id.encode("utf-8")
-    ).hexdigest()[:24]
-    if values["openshell_name"] != expected_sandbox:
+    if values.get("openshell_name") != sandbox_name(home, task_id):
         fail("OpenShell sandbox name is not bound to this Firstmate home and task")
     if values.get("openshell_keep_ai_trailers", "0") not in ("0", "1"):
         fail("task metadata has an invalid AI trailer setting")
@@ -1710,6 +1714,9 @@ def main():
     workspace_parser = sub.add_parser("workspace-id")
     workspace_parser.add_argument("gateway")
     workspace_parser.add_argument("workspace")
+    name_parser = sub.add_parser("sandbox-name")
+    name_parser.add_argument("home")
+    name_parser.add_argument("task_id")
     validate_parser = sub.add_parser("validate")
     validate_parser.add_argument("task_id")
     validate_parser.add_argument("--intent-file", required=True)
@@ -1718,6 +1725,9 @@ def main():
     sub.add_parser("cleanup").add_argument("task_id")
     args = parser.parse_args()
     try:
+        if args.action == "sandbox-name":
+            print(sandbox_name(args.home, args.task_id))
+            return 0
         if args.action == "workspace-id":
             print(workspace_identity(args.gateway, args.workspace))
             return 0
