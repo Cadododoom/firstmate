@@ -66,6 +66,19 @@ Validation approval rechecks batch/HEAD, clean branch and worker generation; row
 Execution must revalidate scope through ordinary supervisor intake and its existing guarded owners.
 Request IDs are at most 118 characters; replay requires identical canonical content, including scope/revision.
 Capture exits 3 if saved but not announced: retry identical request to repair.
+Contract revision 1.4 is additive; request wire v1 remains unchanged.
+Receipts optionally attach fm-workforce-admission.v1: request_id, note_id,
+project, task_id, admitted_generation, committed_at and provenance
+{owner: supervisor-intake, source: committed-task-and-inbox-record}.
+Only fm-spawn.sh --origin-note and inbox publication produce this relation.
+Prepared/answered notes remain unadmitted. admission_cursor and admissions
+are separate from reply_cursor; admissions are a full historical attachment
+inventory, so reconnect reloads them even when replies are cursor-filtered.
+Each note execution projects pending, admitted, generation-changed, retired,
+or unknown from the exact bound fleet row. Original admission generation never
+changes on relaunch; current generation must be refreshed for scoped controls.
+Missing/omitted/incompatible fleet inventory means unknown, never completion.
+Retired means historical admission with no current row, not successful outcome.
 Receipts retain fm-inbox-receipts.v1 cursor, omission and reply semantics.
 Status embeds fm-fleet-snapshot.v1 and fm-inbox readiness with owner provenance.
 Window request_supported verifies registered project/job/generation scope and
@@ -550,6 +563,48 @@ def preference_snapshot(home, env, policies, fleet):
     return snapshot
 
 
+def admission_projection(home, env, receipts, fleet=None):
+    if fleet is None:
+        try:
+            fleet = json.loads(output(env, 'fm-fleet-snapshot.sh', '--json'))
+        except (ValueError, OSError):
+            fleet = None
+    known = (isinstance(fleet, dict) and fleet.get('schema') == 'fm-fleet-snapshot.v1'
+             and fleet.get('fm_home') == str(home) and isinstance(fleet.get('tasks'), list)
+             and fleet.get('task_inventory_complete') is True and not fleet.get('omitted'))
+    for note in receipts.get('pending', []) + receipts.get('handled', []):
+        binding = note.get('admission')
+        projection = dict(state='pending', provenance='fm-inbox.sh receipts', current=None)
+        if binding:
+            projection.update(state='unknown', provenance='fm-fleet-snapshot.sh',
+                              admitted_generation=binding['admitted_generation'])
+            if known:
+                matches = [r for r in fleet['tasks'] if r.get('id') == binding['task_id']]
+                if not matches:
+                    projection['state'] = 'retired'
+                elif len(matches) == 1:
+                    row = matches[0]
+                    origin = row.get('admission_origin') or {}
+                    fields = ('request_id', 'note_id', 'project', 'task_id', 'admitted_generation')
+                    exact = (all(origin.get(k) == binding[k] for k in fields)
+                             and origin.get('home') == str(home)
+                             and row.get('project') == str((home/'projects'/binding['project']).resolve())
+                             and row.get('admission_committed_at') == binding['committed_at']
+                             and row.get('admission_committed_generation') == binding['admitted_generation']
+                             and row.get('spawn_gen') and not row.get('remote')
+                             and row.get('generation_current') is True)
+                    if exact:
+                        generation = row['spawn_gen']
+                        projection['state'] = ('admitted' if generation == binding['admitted_generation']
+                                               else 'generation-changed')
+                        projection['current'] = dict(task_id=row['id'], project=binding['project'],
+                            generation=generation, backend=row.get('backend'),
+                            endpoint=row.get('endpoint'), worktree=row.get('paths', {}).get('worktree'),
+                            state=row.get('current_state'), observed_at=fleet.get('generated'))
+        note['execution'] = projection
+    return receipts
+
+
 def status_snapshot(home, env):
     fleet = json.loads(output(env, 'fm-fleet-snapshot.sh', '--json'))
     policies = []
@@ -578,6 +633,7 @@ def status_snapshot(home, env):
             verbs[verb] = {'request_supported': supported, 'direct_execution': False, 'reason': reason}
         windows.append(dict(scope, backend=task['backend'], verbs=verbs))
     return {'schema': 'fm-workforce-status.v1', 'fleet': fleet,
+          'admissions': admission_projection(home, env, json.loads(output(env, 'fm-inbox.sh', 'receipts', '--all-pending', '--all-handled')), fleet),
           'readiness': json.loads(output(env, 'fm-inbox.sh', 'ready')),
           'projects': policies, 'windows': windows,
           'backends': backend_projection(home, env),
@@ -604,7 +660,10 @@ def main():
         return 0
     if command == 'receipts':
         result = run(env, 'fm-inbox.sh', 'receipts', *sys.argv[2:])
-        sys.stdout.write(result.stdout)
+        if result.returncode == 0:
+            emit(admission_projection(home, env, json.loads(result.stdout)))
+        else:
+            sys.stdout.write(result.stdout)
         sys.stderr.write(result.stderr)
         return result.returncode
     fail('invalid command; use --help')
