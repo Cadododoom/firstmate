@@ -394,6 +394,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/workforce-runtime-policy.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/orca-backend.md",
       "audience": "operator-current"
     },

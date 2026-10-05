@@ -784,6 +784,7 @@ def list_notes(folder):
             "request_id": meta.get("request_id"),
             "announce_marker": meta.get("announce_marker") == "1",
             "body": body,
+            "allocation": json.loads(meta["workforce_allocation"]) if meta.get("workforce_allocation") else None,
             "admission": json.loads(meta["admission"]) if meta.get("admission") else None,
             "admission_state": "admitted" if meta.get("admission") else "prepared" if meta.get("admission_prepared") else "unadmitted",
             "admission_cursor": meta.get("admission_cursor"),

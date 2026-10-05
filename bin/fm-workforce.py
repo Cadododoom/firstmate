@@ -5,6 +5,7 @@ Usage (FM_HOME must be explicit):
   fm-workforce.py submit                 JSON request on stdin
   fm-workforce.py receipts [inbox receipt flags]
   fm-workforce.py status
+  fm-workforce.py allocation-request <note-id> <root-index>  supervisor capture only
   fm-workforce.py answer <note-id>       JSON answer on stdin; supervisor only
 
 FM_HOME must name an existing absolute operational home. The bridge clears other
@@ -12,7 +13,8 @@ FM_* and TASKS_AXI_FILE/BACKEND overrides for delegated owners and uses this
 script's code root; it does not support alternate project/state/config roots.
 
 This is a trusted local CLI, not an authenticated network service. Only submit,
-receipts and status are UI surfaces. answer is the supervisor's reply publisher,
+receipts and status are UI surfaces. allocation-request captures a deterministic
+root request from an already frozen allocation; fm-spawn still owns execution. answer is the supervisor's reply publisher,
 not execution or approval authority. The inbox owns all durable records/wakes.
 Requests never execute lifecycle, change policy, spawn, merge or validate.
 No payload can select a home, executable, arguments, endpoint or worktree.
@@ -29,6 +31,7 @@ import hashlib
 import shutil
 import subprocess
 import sys
+import fm_workforce_policy as runtime_policy
 
 BIN = Path(__file__).resolve().parent
 SCHEMA = 'fm-workforce-request.v1'
@@ -44,7 +47,7 @@ Validation scope requires project, job, batch, branch, head and generation;
 batch is the full Git commit ID of the completed revision and must equal head.
 Payload is
  {posture: "assistant", delivery_mode: "no-mistakes"}.
-Job payload optionally adds preferences (same fixed defaults fields) and
+Job payload optionally adds execution_policy (fm_workforce_policy.py owns its schema), preferences (same fixed defaults fields) and
 preference_revision (64 lowercase hex digits from the observed status snapshot).
 This immutable requested snapshot is not a dispatch selection or effective grant.
 Job payload: {kind: ship|scout, text: instructions, posture: autonomy|assistant,
@@ -66,7 +69,7 @@ Validation approval rechecks batch/HEAD, clean branch and worker generation; row
 Execution must revalidate scope through ordinary supervisor intake and its existing guarded owners.
 Request IDs are at most 118 characters; replay requires identical canonical content, including scope/revision.
 Capture exits 3 if saved but not announced: retry identical request to repair.
-Contract revision 1.4 is additive; request wire v1 remains unchanged.
+Contract revision 1.5 is additive; request wire v1 remains unchanged.
 Receipts optionally attach fm-workforce-admission.v1: request_id, note_id,
 project, task_id, admitted_generation, committed_at and provenance
 {owner: supervisor-intake, source: committed-task-and-inbox-record}.
@@ -330,7 +333,9 @@ def validate(home, env, request, current=True):
         allowed = {'posture', 'delivery_mode', 'merge_autonomy'}
         if action == 'job-request':
             allowed |= {'kind', 'text'}
-        keys(payload, allowed | ({'preferences', 'preference_revision'} if action == 'job-request' else set()), allowed)
+        keys(payload, allowed | ({'preferences', 'preference_revision', 'execution_policy'} if action == 'job-request' else set()), allowed)
+        if action == 'job-request' and 'execution_policy' in payload:
+            runtime_policy.validate(payload['execution_policy'])
         if action == 'job-request' and ('preferences' in payload or 'preference_revision' in payload):
             if not {'preferences', 'preference_revision'} <= set(payload):
                 fail('new-worker preference snapshot requires preferences and preference_revision')
@@ -427,6 +432,30 @@ def submit(home, env):
         sys.stdout.write(result.stdout)
         sys.stderr.write(result.stderr)
         return result.returncode
+
+
+def allocation_request(home, env, note_id, index):
+    # Supervisor intake operation: capture one deterministic root request only.
+    # It never chooses profiles, creates workers or assumes admission approval.
+    from fm_inbox_admission import captured
+    _, _, _, request = captured(home, note_id)
+    policy = request['payload'].get('execution_policy')
+    if policy is None:
+        fail('request has no frozen workload allocation')
+    runtime_policy.validate(policy)
+    if not re.fullmatch(r'[0-9]+', index) or not 0 <= int(index) < policy['crew']:
+        fail('root index outside frozen workload allocation')
+    if int(index) == 0:
+        emit(dict(id=note_id, request_id=request['request_id'], effect='existing-request-only'))
+        return 0
+    child = dict(request, request_id='allocation-'+hashlib.sha256(request['request_id'].encode()).hexdigest()[:32]+'-'+str(int(index)))
+    validate(home, env, child, current=False)
+    body = PREFIX + canonical(child)
+    with capture_lock(home):
+        result = run(env, 'fm-inbox.sh', 'note', '--request-id', 'workforce:'+child['request_id'], '--json', '-', body=body)
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    return result.returncode
 
 
 def answer(home, env, note_id):
@@ -601,8 +630,25 @@ def admission_projection(home, env, receipts, fleet=None):
                             generation=generation, backend=row.get('backend'),
                             endpoint=row.get('endpoint'), worktree=row.get('paths', {}).get('worktree'),
                             state=row.get('current_state'), observed_at=fleet.get('generated'))
+        if note.get('allocation') and binding and projection['current']:
+            try:
+                projection['effective_policy'] = runtime_policy.observe(home, binding['task_id'])
+            except (ValueError, OSError, KeyError, TypeError):
+                projection['effective_policy'] = dict(state='unknown', occupied=None, attested=False)
         note['execution'] = projection
     return receipts
+
+
+def effective_policies(home):
+    result = []
+    for path in sorted((home/'state').glob('*.meta')):
+        try:
+            values = meta_fields(home, path.stem)
+            if values.get('workforce_allocation'):
+                result.append(dict(task_id=path.stem, **runtime_policy.observe(home, path.stem)))
+        except (ValueError, OSError, KeyError, TypeError):
+            result.append(dict(task_id=path.stem, state='unknown', occupied=None, attested=False))
+    return result
 
 
 def status_snapshot(home, env):
@@ -637,6 +683,8 @@ def status_snapshot(home, env):
           'readiness': json.loads(output(env, 'fm-inbox.sh', 'ready')),
           'projects': policies, 'windows': windows,
           'backends': backend_projection(home, env),
+          'effective_policies': effective_policies(home),
+          'execution_capabilities': runtime_policy.capabilities(),
           'preferences': preference_snapshot(home, env, policies, fleet),
           'model_catalogs': [model_catalog(h) for h in subprocess.check_output(['bash', '-c', '. "$1"; fm_control_harnesses',
               'workforce', str(BIN / 'fm-control-lib.sh')], text=True, env=env).splitlines()],
@@ -653,6 +701,8 @@ def main():
     command = sys.argv[1]
     if command == 'submit' and len(sys.argv) == 2:
         return submit(home, env)
+    if command == 'allocation-request' and len(sys.argv) == 4:
+        return allocation_request(home, env, sys.argv[2], sys.argv[3])
     if command == 'answer' and len(sys.argv) == 3:
         return answer(home, env, sys.argv[2])
     if command == 'status' and len(sys.argv) == 2:

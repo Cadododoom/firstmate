@@ -1117,6 +1117,8 @@ Secondmate homes inherit this file from the primary, so a secondmate's own crewm
 
 ## Workforce integration
 
+The frozen execution-policy extension and current supported runtime limits are described in [Workforce execution policy](workforce-runtime-policy.md).
+
 Workforce clients can submit Assistant or Autonomy job, policy, prospective-default, and supported window requests, observe fleet and preference status, and read durable Firstmate answers through a trusted local CLI.
 The interface supplies no graphical controls or VM, snapshot, or cloud-backup management.
 Submission queues a request for Firstmate rather than applying policy or performing the requested action.

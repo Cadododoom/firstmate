@@ -15,7 +15,12 @@ import sys
 import tempfile
 import tarfile
 import time
+import importlib.util
 from pathlib import Path
+
+_policy_spec = importlib.util.spec_from_file_location("fm_workforce_policy", Path(__file__).with_name("fm_workforce_policy.py"))
+workforce_policy = importlib.util.module_from_spec(_policy_spec)
+_policy_spec.loader.exec_module(workforce_policy)
 
 
 MAX_REQUEST = 1024 * 1024
@@ -237,6 +242,11 @@ def read_journal(ctx):
         fail("OpenShell recovery journal identity does not match this task")
     if data.get("workspace") != ctx["workspace"] or data.get("workspace_id") != ctx["workspace_id"]:
         fail("OpenShell recovery journal workspace does not match this task")
+    generation = ctx.get('values', {}).get('spawn_gen')
+    if generation and data.get('generation') not in (None, generation):
+        fail("OpenShell journal belongs to another runtime generation")
+    if ctx.get('values', {}).get('workforce_allocation') and data.get('generation') != generation:
+        fail("policy-bound OpenShell journal has no exact runtime generation")
     return data
 
 
@@ -245,6 +255,8 @@ def write_journal(ctx, data):
     data["workspace"] = ctx["workspace"]
     data["workspace_id"] = ctx["workspace_id"]
     data["task_id"] = ctx["id"]
+    if ctx.get("values", {}).get("spawn_gen"):
+        data["generation"] = ctx["values"]["spawn_gen"]
     data["worktree"] = str(ctx["worktree"])
     tmp = path.with_name(path.name + ".tmp")
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
@@ -1302,6 +1314,25 @@ def run_codex(ctx, journal, prompt, model, effort):
     model = "gpt-6.1-sol" if not model or model == "default" else model
     effort = "medium" if not effort or effort == "default" else effort
     codex_args = ["codex", "--model", model]
+    allocation_raw = ctx.get('values', {}).get('workforce_allocation')
+    if allocation_raw:
+        allocation = json.loads(allocation_raw)
+        policy = workforce_policy.validate(allocation['policy'])
+        if policy['route'] != 'openshell' or allocation['policy_digest'] != workforce_policy.digest(policy):
+            fail('frozen policy does not bind this OpenShell runtime')
+        # Probe the installed WORKLOAD CLI, never the host CLI as a substitute.
+        command = openshell_argv(ctx, 'sandbox', 'exec', '--name', ctx['sandbox'],
+            '--workdir', '/sandbox', '--no-login-shell', '--env', 'CODEX_HOME=/tmp/fm-policy-probe', '--', 'codex')
+        try:
+            native = workforce_policy.probe_codex(policy, command=command)
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
+            fail('OpenShell workload native policy prerequisite: '+str(error))
+        native['source'] = 'workspace-bound-workload-codex-config/read'
+        codex_args[1:1] = workforce_policy.flags(native['controls'])
+        journal['native_policy'] = native
+        journal['workforce_policy_digest'] = allocation['policy_digest']
+        journal['filesystem_policy_sha256'] = hashlib.sha256(ctx['policy'].read_bytes()).hexdigest()
+
     if effort in ("low", "medium", "high", "xhigh"):
         codex_args.extend(["-c", "model_reasoning_effort=\"" + effort + "\""])
     elif effort == "max" and model == "gpt-5.6-luna":

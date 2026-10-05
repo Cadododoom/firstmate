@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import fm_workforce_policy as policy
 
 spec = importlib.util.spec_from_file_location('workforce', Path(__file__).with_name('fm-workforce.py'))
 w = importlib.util.module_from_spec(spec)
@@ -89,6 +90,10 @@ def prepare(home, note, task, project, kind):
             origin = json.loads(fields['admission_origin'])
             if origin.get('note_id') == note or origin.get('task_id') == task:
                 w.fail('duplicate task origin')
+    allocation = policy.reserve(home, request,
+        list(inbox.glob('*.note')) + list((inbox/'handled').glob('*.note')), record)
+    if allocation:
+        headers['workforce_allocation'] = w.canonical(allocation)
     prepared = dict(request_id=request['request_id'], note_id=note, project=alias,
                     task_id=task, kind=kind, home=str(home))
     headers['admission_prepared'] = w.canonical(prepared)
@@ -137,6 +142,9 @@ def publish(home, task, cursor):
         other = w.meta_fields(home, meta.stem).get('admission_origin')
         if other and json.loads(other).get('note_id') == value['note_id']:
             w.fail('duplicate committed origins')
+    frozen_allocation = headers.get('workforce_allocation')
+    if frozen_allocation != values.get('workforce_allocation'):
+        w.fail('committed allocation differs from frozen reservation')
     binding = {k: v for k, v in value.items() if k not in {'kind', 'home'}}
     binding.update(schema='fm-workforce-admission.v1', committed_at=stamp,
                    provenance=dict(owner='supervisor-intake', source='committed-task-and-inbox-record'))

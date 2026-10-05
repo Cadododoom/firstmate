@@ -43,6 +43,8 @@
 #   steering inbox. This never rewrites a project's instruction files or a
 #   secondmate's charter.
 #        fm-spawn.sh <task-id> --relaunch [--harness <name>] [--model <name>] [--effort <level>]
+#   Frozen execution policy and allocation are owned by fm_workforce_policy.py;
+#   policy-bound native launches use fm-workforce-policy.py for generation evidence.
 #   --origin-note <note-id> reserves one captured Workforce job-request for a
 #   fresh, single local ship/scout with a paired backlog. Requires explicit
 #   FM_HOME and canonical roots. The inbox reservation precedes allocation;
@@ -3698,6 +3700,26 @@ if [ "$SPAWN_META_LOCK_HELD" != 1 ]; then
   fm_lock_acquire_wait "$SPAWN_META_LOCK"
   SPAWN_META_LOCK_HELD=1
 fi
+# Frozen Workforce execution policy is checked before allocating an endpoint.
+WORKFORCE_POLICY_BOUND=0
+WORKFORCE_POLICY_NOTE=$ORIGIN_NOTE
+if [ "$RELAUNCH" -eq 1 ] && [ -n "$(fm_meta_get "$RELAUNCH_META" workforce_allocation)" ]; then
+  WORKFORCE_POLICY_NOTE=$(FM_HOME=$FM_HOME python3 "$SCRIPT_DIR/fm-workforce-policy.py" origin-note "$ID") || exit 1
+fi
+if [ -n "$WORKFORCE_POLICY_NOTE" ]; then
+  WORKFORCE_ROUTE=host
+  [ "$OPENSH_ENABLED" != 1 ] || WORKFORCE_ROUTE=openshell
+  WORKFORCE_PREFLIGHT=$(FM_HOME=$FM_HOME python3 "$SCRIPT_DIR/fm-workforce-policy.py" preflight \
+    "$WORKFORCE_POLICY_NOTE" "$ID" "$HARNESS" "$BACKEND" "$WORKFORCE_ROUTE" \
+    "${MODE:-local-only}" "${YOLO:-off}" "${MODEL:-default}" "${EFFORT:-default}") || exit 1
+  if [ "$WORKFORCE_PREFLIGHT" != null ]; then
+    [ "$RAW_LAUNCH" = 0 ] && [ "$KIND" != secondmate ] && [ "$STATE" = "$FM_HOME/state" ] || {
+      echo "error: frozen Workforce policy requires the canonical native disposable-worker launch" >&2
+      exit 1
+    }
+    WORKFORCE_POLICY_BOUND=1
+  fi
+fi
 if [ -n "$ORIGIN_NOTE" ]; then
   [ "$BACKLOG_TRANSITION" = 1 ] || {
     echo "error: origin admission requires a paired backlog" >&2
@@ -5112,6 +5134,9 @@ preserve_relaunch_meta() {
   if [ -n "$ORIGIN_NOTE" ]; then
     origin_record=$(FM_HOME=$FM_HOME python3 "$SCRIPT_DIR/fm_inbox_admission.py" origin "$ORIGIN_NOTE" "$ID" "$SPAWN_GEN") || exit 1
     printf 'admission_origin=%s\n' "$origin_record"
+    workforce_allocation=$(FM_HOME=$FM_HOME python3 "$SCRIPT_DIR/fm-workforce-policy.py" allocation "$ORIGIN_NOTE") || exit 1
+    [ "$workforce_allocation" = null ] || printf 'workforce_allocation=%s\n' "$workforce_allocation"
+
   fi
   # Default-off writes no traceparent= line.
   # backend= is written only for a non-default (non-tmux) backend, so the
@@ -5387,6 +5412,14 @@ fi
 # to keeping trailers, leave core.hooksPath alone so the repository's hooks run
 # directly. An export statement inside the pane command carries the override
 # across every step of a compound raw launch while firstmate's own git is unchanged.
+if [ "$WORKFORCE_POLICY_BOUND" = 1 ] && [ "$OPENSH_ENABLED" != 1 ]; then
+  WORKFORCE_LAUNCH_PREFIX="FM_HOME=$(shell_quote "$FM_HOME") python3 $(shell_quote "$SCRIPT_DIR/fm-workforce-policy.py") launch $(shell_quote "$ID") --"
+  if [ "$HARNESS" = opencode ]; then
+    LAUNCH=${LAUNCH/ opencode / $WORKFORCE_LAUNCH_PREFIX opencode }
+  else
+    LAUNCH="$WORKFORCE_LAUNCH_PREFIX $LAUNCH"
+  fi
+fi
 if [ "$OPENSH_ENABLED" = 1 ]; then
   LAUNCH="FM_HOME=$(shell_quote "$FM_HOME") FM_STATE_OVERRIDE=$(shell_quote "$STATE_REAL") FM_CONFIG_OVERRIDE=$(shell_quote "$CONFIG") FM_ROOT_OVERRIDE=$(shell_quote "$FM_ROOT") $(shell_quote "$OPENSH_PYTHON") $(shell_quote "$FM_ROOT/bin/fm-openshell-codex.py") run $(shell_quote "$ID") $(shell_quote "$BRIEF") --model $(shell_quote "${MODEL:-default}") --effort $(shell_quote "${EFFORT:-default}")"
 fi

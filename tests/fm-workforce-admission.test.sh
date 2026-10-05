@@ -185,6 +185,40 @@ result=json.loads(run('fm-workforce.py','receipts','--all-handled',
     extra=dict(ADMISSION_FLEET_FIXTURE='unavailable')).stdout)
 assert next(n for n in result['handled'] if n['id']==n1)['execution']['state']=='unknown'
 (fake/'bash').unlink()
+# Frozen allocation uses the existing serialized admission owner, with exact
+# quantities and immutable slots retained through acknowledgement/recovery.
+policy = dict(schema='fm-workforce-policy.v1', allocation_id='frozen-job', crew=2,
+              descendants=dict(concurrent=0), route='host',
+              revisions=dict(global_='unused'))
+policy['revisions'] = {key:'a'*64 for key in ['global','project','job']}
+_, base = submit('allocation-unbound-template')
+base = dict(base, request_id='allocation-root', payload=dict(base['payload'], execution_policy=policy))
+rootnote = json.loads(run('fm-workforce.py','submit',value=base).stdout)['id']
+childnote = json.loads(run('fm-workforce.py','allocation-request',rootnote,'1').stdout)['id']
+assert json.loads(run('fm-workforce.py','allocation-request',rootnote,'1').stdout)['id']==childnote
+run('fm-workforce.py','allocation-request',rootnote,'2',ok=False)
+for noteid, task in [(rootnote,'allocation-one'),(childnote,'allocation-two')]:
+    run('fm-inbox.sh','prepare-admission',noteid,task,str(home/'projects/demo'),'ship')
+a = json.loads(run('fm-workforce-policy.py','allocation',rootnote).stdout)
+b = json.loads(run('fm-workforce-policy.py','allocation',childnote).stdout)
+assert [a['slot'],b['slot']]==[0,1] and a['policy_digest']==b['policy_digest']
+run('fm-inbox.sh','drain','--ack',rootnote)
+assert json.loads(run('fm-workforce-policy.py','allocation',rootnote).stdout)==a
+assert next(n for n in receipts()['handled'] if n['id']==rootnote)['allocation']==a
+# A new request cannot exceed the allocation, reopen a slot after a restart,
+# mutate the policy under the same identity, or request ambiguous quantities.
+extra = dict(base,request_id='allocation-overflow')
+overflow = json.loads(run('fm-workforce.py','submit',value=extra).stdout)['id']
+run('fm-inbox.sh','prepare-admission',overflow,'allocation-three',str(home/'projects/demo'),'ship',ok=False)
+changed_policy = dict(policy,crew=3)
+changed = dict(base,request_id='allocation-changed',payload=dict(base['payload'],execution_policy=changed_policy))
+changed_note = json.loads(run('fm-workforce.py','submit',value=changed).stdout)['id']
+run('fm-inbox.sh','prepare-admission',changed_note,'allocation-changed',str(home/'projects/demo'),'ship',ok=False)
+for invalid in [dict(policy,crew=True),dict(policy,crew=1.5),dict(policy,descendants=3),
+                dict(policy,descendants=dict(concurrent=1,total=2)),dict(policy,route='/host/path')]:
+    run('fm-workforce.py','submit',value=dict(base,request_id='bad-policy',payload=dict(base['payload'],execution_policy=invalid)),ok=False)
+# Effective policy refuses generationless configuration as runtime proof.
+run('fm-workforce-policy.py','observe','allocation-one',ok=False)
 print('PASS: exact admission, answer-only, spawn/relaunch custody, crash replay, conflicts and retirement')
 PY
 pass 'Workforce authoritative admission owner boundaries'
